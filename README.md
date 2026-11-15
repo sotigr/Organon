@@ -1,5 +1,7 @@
 # Organon
 
+** Super ultra vibed, but it had an original design by me, see docs/Schema-Driven Application Framework Design Document.md **
+
 A schema-driven application framework. You describe an application as
 **JSON Schemas** (data types), **policy expressions** (who may do what),
 **flow graphs** (behaviour, as JSON DAGs editable in a visual editor), and
