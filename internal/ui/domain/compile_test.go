@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -135,6 +136,20 @@ func TestValidationRules(t *testing.T) {
 			"/body/state", "integer state variable"},
 		{"field speech opt-out is a boolean", "", `{"component":"form","mode":"create","type":"task","parent":"params.id","fields":[{"path":"/title","speech":"no"}]}`,
 			"/body/fields/0/speech", "boolean"},
+		// ADR 0029: navigation links and groups.
+		{"nav link needs page or url", "", `{"component":"nav","items":[{"label":"x"}]}`, "/body/items/0", "exactly one of page and url"},
+		{"nav link with page and url", "", `{"component":"nav","items":[{"label":"x","page":"home","url":"https://x.org"}]}`, "/body/items/0", "exactly one of page and url"},
+		{"nav group has no page", "", `{"component":"nav","items":[{"label":"x","page":"home","items":[]}]}`, "/body/items/0", "a group has items"},
+		{"nav groups nest one level", "", `{"component":"nav","items":[{"label":"x","items":[{"label":"y","items":[]}]}]}`,
+			"/body/items/0/items/0/items", "unknown member"},
+		{"nav group link target", "", `{"component":"nav","items":[{"label":"x","items":[{"label":"y","page":"zz"}]}]}`,
+			"/body/items/0/items/0/page", "unknown page"},
+		{"nav link params", "", `{"component":"nav","items":[{"label":"x","page":"p"}]}`, "/body/items/0", "needs parameter \"id\""},
+		{"nav icon is an asset", "", `{"component":"nav","items":[{"label":"x","page":"home","icon":"assets/none.svg"}]}`, "/body/items/0/icon", "ui/assets"},
+		{"nav badge type checks", taskData, `{"component":"nav","items":[{"label":"x","page":"home","badge":"{{ data.task.nope }}"}]}`, "/body/items/0/badge", "unknown field nope"},
+		{"nav orientation", "", `{"component":"nav","orientation":"diagonal"}`, "/body/orientation", "must be one of"},
+		{"user menu has no groups", "", `{"component":"userMenu","items":[{"label":"x","items":[]}]}`, "/body/items/0/items", "unknown member"},
+		{"user menu signOut is a boolean", "", `{"component":"userMenu","signOut":"no"}`, "/body/signOut", "boolean"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.rule, func(t *testing.T) {
@@ -173,6 +188,23 @@ func TestFileRules(t *testing.T) {
 			"ui/pages/q.json": `{"page":"q","route":"/q/:other","params":{"other":{"type":"string"}},"body":{"component":"divider"}}`},
 			"ui/app.json", "/linkHome", "only need the route parameter id", false},
 		{"logo must be an asset", map[string]string{"ui/app.json": `{"home":"home","logo":"logo.png"}`}, "ui/app.json", "/logo", "ui/assets", false},
+		// ADR 0029: layouts.
+		{"app layout exists", map[string]string{"ui/app.json": `{"home":"home","layout":"side"}`}, "ui/app.json", "/layout", "unknown layout", false},
+		{"page layout exists", map[string]string{"ui/pages/x.json": `{"page":"x","route":"/x","layout":"side","body":{"component":"divider"}}`},
+			"ui/pages/x.json", "/layout", "unknown layout", false},
+		{"layout name", map[string]string{"ui/layouts/x.json": `{"layout":"9x","header":{"component":"brand"}}`}, "ui/layouts/x.json", "/layout", "must match", false},
+		{"reserved layout names", map[string]string{"ui/layouts/x.json": `{"layout":"none","header":{"component":"brand"}}`}, "ui/layouts/x.json", "/layout", "reserved", false},
+		{"duplicate layout", map[string]string{"ui/layouts/a.json": `{"layout":"main","header":{"component":"brand"}}`,
+			"ui/layouts/b.json": `{"layout":"main","header":{"component":"brand"}}`}, "", "/layout", "also defined", false},
+		{"layout needs a region", map[string]string{"ui/layouts/m.json": `{"layout":"m"}`}, "ui/layouts/m.json", "", "at least one of header", false},
+		{"layout unknown member", map[string]string{"ui/layouts/m.json": `{"layout":"m","body":{"component":"brand"}}`}, "ui/layouts/m.json", "/body", "unknown member", false},
+		{"layout sees page, not params", map[string]string{"ui/layouts/m.json": `{"layout":"m","header":{"component":"text","text":"{{ params.id }}"}}`},
+			"ui/layouts/m.json", "/header/text", "unknown name params", false},
+		{"layout data sources are checked", map[string]string{"ui/layouts/m.json": `{"layout":"m","data":{"t":{"query":{"type":"task","where":{"field":"/estimate","op":"eq","value":"'1'"}}}},"header":{"component":"brand"}}`},
+			"ui/layouts/m.json", "/data/t/query/where/field", "not queryable", false},
+		{"layout dialogs are its own", map[string]string{"ui/layouts/m.json": `{"layout":"m","header":{"component":"button","label":"x","on":{"click":[{"do":"open","dialog":"d"}]}}}`},
+			"ui/layouts/m.json", "/header/on/click/0/dialog", "in this layout", false},
+		{"unused layout", map[string]string{"ui/layouts/m.json": `{"layout":"m","header":{"component":"brand"}}`}, "ui/layouts/m.json", "", "no page uses layout m", false},
 		// ADR 0028: dictation settings.
 		{"speech mode", map[string]string{"ui/app.json": `{"home":"home","speech":{"mode":"cloud"}}`}, "ui/app.json", "/speech/mode", "auto, browser, or server", false},
 		{"speech maxSeconds", map[string]string{"ui/app.json": `{"home":"home","speech":{"maxSeconds":600}}`}, "ui/app.json", "/speech/maxSeconds", "5 to 120", false},
@@ -216,6 +248,56 @@ func TestFileRules(t *testing.T) {
 	}
 }
 
+// ADR 0029: pages take the app's layout unless they name their own; a
+// layout's types and texts are part of the app.
+func TestLayouts(t *testing.T) {
+	c, probs := compile(t, map[string]string{
+		"ui/app.json":         `{"home":"home","layout":"main"}`,
+		"ui/pages/bare.json":  `{"page":"bare","route":"/bare","layout":"none","body":{"component":"divider"}}`,
+		"ui/pages/plain.json": `{"page":"plain","route":"/plain","layout":"default","body":{"component":"divider"}}`,
+		"ui/layouts/main.json": `{"layout":"main",
+			"state":{"open":{"type":"boolean"}},
+			"data":{"mine":{"query":{"type":"task","where":{"field":"/assignee","op":"eq","value":"principal.id"}}}},
+			"header":{"component":"row","children":[
+				{"component":"brand","text":"Home base"},
+				{"component":"nav","items":[
+					{"label":"Home","page":"home","badge":"{{ len(data.mine ?? []) }}","active":"page.name == 'home'"},
+					{"label":"Elsewhere","items":[{"label":"Docs","url":"https://example.org"}]}]},
+				{"component":"spacer"},{"component":"languageSwitch"},
+				{"component":"button","label":"Toggle","on":{"click":[{"do":"set","state":"open","value":"!state.open"},{"do":"open","dialog":"d"}]}},
+				{"component":"dialog","name":"d","children":[]},
+				{"component":"userMenu","items":[{"label":"Bare","page":"bare","visible":"page.params.id == nil"}]}]},
+			"sidebar":{"component":"nav","orientation":"vertical"},
+			"footer":{"component":"text","text":"Footer"}}`,
+	})
+	if c == nil {
+		t.Fatal(probs)
+	}
+	layouts := map[string]string{}
+	for _, p := range c.Pages {
+		layouts[p.Name] = p.Layout
+	}
+	if layouts["home"] != "main" || layouts["bare"] != domain.LayoutNone || layouts["plain"] != domain.LayoutDefault {
+		t.Fatalf("page layouts: %v", layouts)
+	}
+	if len(c.Layouts) != 1 || c.Layouts[0].Name != "main" || strings.Join(c.Layouts[0].Types, ",") != "task" {
+		t.Fatalf("layouts: %+v", c.Layouts)
+	}
+	for _, want := range []string{"Home base", "Elsewhere", "Footer"} {
+		if !slices.Contains(c.AppTexts, want) {
+			t.Errorf("layout text %q is not an app text: %v", want, c.AppTexts)
+		}
+	}
+	if strings.Contains(string(c.Layouts[0].Doc), "x-layout") {
+		t.Fatal("browser documents drop authoring members")
+	}
+	// Without a layout in ui/app.json, pages keep the built-in header.
+	c, probs = compile(t, nil)
+	if c == nil || c.Pages[0].Layout != domain.LayoutDefault {
+		t.Fatalf("default layout: %+v %v", c, probs)
+	}
+}
+
 func TestCompiledTracker(t *testing.T) {
 	files, _ := filepath.Glob("../../../examples/tracker/ui/*/*.json")
 	more, _ := filepath.Glob("../../../examples/tracker/ui/*.*")
@@ -245,6 +327,9 @@ func TestCompiledTracker(t *testing.T) {
 	}
 	if strings.Contains(string(task.Doc), "x-layout") || strings.Contains(string(task.Doc), "$schema") {
 		t.Fatal("browser documents drop authoring members")
+	}
+	if len(c.Layouts) != 1 || task.Layout != "main" || byName["sharedTask"].Layout != domain.LayoutDefault {
+		t.Fatalf("layouts: %+v, task in %q", c.Layouts, task.Layout)
 	}
 }
 
@@ -304,7 +389,8 @@ func mustJSON(v any) []byte {
 // The generated JSON Schemas accept every tracker UI file, so editor
 // completion never contradicts organon validate.
 func TestSchemasAcceptTracker(t *testing.T) {
-	for name, schema := range map[string]map[string]any{"page": domain.PageSchema(), "app": domain.AppSchema(), "i18n": domain.I18nSchema()} {
+	for name, schema := range map[string]map[string]any{"page": domain.PageSchema(), "app": domain.AppSchema(), "i18n": domain.I18nSchema(),
+		"layout": domain.LayoutSchema()} {
 		c := js.NewCompiler()
 		raw, _ := json.Marshal(schema)
 		doc, _ := js.UnmarshalJSON(strings.NewReader(string(raw)))
@@ -321,6 +407,8 @@ func TestSchemasAcceptTracker(t *testing.T) {
 			files = []string{"../../../examples/tracker/ui/app.json"}
 		case "i18n":
 			files, _ = filepath.Glob("../../../examples/tracker/ui/i18n/*.json")
+		case "layout":
+			files, _ = filepath.Glob("../../../examples/tracker/ui/layouts/*.json")
 		}
 		for _, f := range files {
 			b, _ := os.ReadFile(f)

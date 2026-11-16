@@ -49,6 +49,7 @@ re-run. Do not stop until validate and test pass.
 | Config values | `app.json` `settings` + `env/<env>.json`, read as `env.<key>` | [manifest](docs/usage/02-manifest.md) |
 | End-user UI shell (title, home, nav, login) | `ui/app.json` | [UI](docs/usage/11-ui.md) |
 | A screen of the end-user UI | `ui/pages/<name>.json` (component tree) | [UI](docs/usage/11-ui.md) |
+| Header, sidebar, footer, custom navigation | `ui/layouts/<name>.json` + `ui/app.json` `layout` | [UI](docs/usage/11-ui.md#layouts-and-navigation) |
 | UI look | `ui/styles.css` (override `--o-*` variables, `o-*` classes), `ui/assets/**` | [UI](docs/usage/11-ui.md#styling) |
 | UI in more languages | `ui/app.json` `languages` + `ui/i18n/<lang>.json` | [UI](docs/usage/11-ui.md#languages) |
 
@@ -121,6 +122,7 @@ Copy patterns from [examples/tracker](examples/tracker):
 dialog with a create form, action button), `ui/pages/task.json` (update
 form, transitions, menu, file preview, comments list), `ui/i18n/el.json`
 (translations; `ui/i18n/en.json` for `@key` texts and labels),
+`ui/layouts/main.json` (header with nav groups, badge, user menu),
 `tests/ui-pages.test.json`.
 
 The node catalog with inputs is in

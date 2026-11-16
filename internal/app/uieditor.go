@@ -30,6 +30,8 @@ func (h *uiEditor) register(mux *http.ServeMux) {
 	if h.rt.Cfg.Dev {
 		mux.HandleFunc("PUT /v1/dev/manifest/ui/pages/{name}", h.savePage)
 		mux.HandleFunc("DELETE /v1/dev/manifest/ui/pages/{name}", h.deletePage)
+		mux.HandleFunc("PUT /v1/dev/manifest/ui/layouts/{name}", h.saveLayout)
+		mux.HandleFunc("DELETE /v1/dev/manifest/ui/layouts/{name}", h.deleteLayout)
 		mux.HandleFunc("PUT /v1/dev/manifest/ui/app", h.saveApp)
 		mux.HandleFunc("PUT /v1/dev/manifest/ui/styles", h.saveStyles)
 		mux.HandleFunc("PUT /v1/dev/manifest/ui/assets/{path...}", h.saveAsset)
@@ -89,9 +91,10 @@ func (h *uiEditor) source(w http.ResponseWriter, r *http.Request) {
 	if !adminOnly(w, r) {
 		return
 	}
-	out := map[string]any{"dev": h.rt.Cfg.Dev, "app": nil, "styles": nil, "pages": []sourcePage{}, "assets": []string{},
+	out := map[string]any{"dev": h.rt.Cfg.Dev, "app": nil, "styles": nil, "pages": []sourcePage{}, "layouts": []sourcePage{}, "assets": []string{},
 		"types": h.rt.UI.AllTypes(accessapi.PrincipalFrom(r.Context()))}
 	pages := []sourcePage{}
+	layouts := []sourcePage{}
 	assets := []string{}
 	for _, f := range h.rt.App.Manifest.UI {
 		rel := f.Path
@@ -110,12 +113,20 @@ func (h *uiEditor) source(w http.ResponseWriter, r *http.Request) {
 			if json.Unmarshal(f.Data, &head) == nil {
 				pages = append(pages, sourcePage{Name: head.Page, File: f.Path, Doc: f.Data})
 			}
+		case strings.HasPrefix(rel, "ui/layouts/"):
+			var head struct {
+				Layout string `json:"layout"`
+			}
+			if json.Unmarshal(f.Data, &head) == nil {
+				layouts = append(layouts, sourcePage{Name: head.Layout, File: f.Path, Doc: f.Data})
+			}
 		case strings.HasPrefix(rel, "ui/assets/"):
 			assets = append(assets, strings.TrimPrefix(rel, "ui/assets/"))
 		}
 	}
 	sort.Slice(pages, func(i, j int) bool { return pages[i].Name < pages[j].Name })
-	out["pages"], out["assets"] = pages, assets
+	sort.Slice(layouts, func(i, j int) bool { return layouts[i].Name < layouts[j].Name })
+	out["pages"], out["layouts"], out["assets"] = pages, layouts, assets
 	httpserver.WriteJSON(w, http.StatusOK, out)
 }
 
@@ -268,6 +279,59 @@ func (h *uiEditor) deletePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	file := h.pageFile(r.PathValue("name"))
+	if !h.exists(file) {
+		httpserver.WriteError(w, r, kernel.ErrNotFound)
+		return
+	}
+	h.apply(w, r, nil, []string{file})
+}
+
+// layoutFile is the file of layout name: its current file, or
+// ui/layouts/<name>.json.
+func (h *uiEditor) layoutFile(name string) string {
+	if ui := h.rt.App.UI; ui != nil {
+		for _, l := range ui.Layouts {
+			if l.Name == name {
+				return l.File
+			}
+		}
+	}
+	return "ui/layouts/" + name + ".json"
+}
+
+// saveLayout writes ui/layouts/<name>.json (ADR 0029).
+func (h *uiEditor) saveLayout(w http.ResponseWriter, r *http.Request) {
+	if !adminOnly(w, r) {
+		return
+	}
+	name := r.PathValue("name")
+	var b struct {
+		Document json.RawMessage `json:"document"`
+	}
+	if err := httpserver.DecodeJSON(r, &b); err != nil {
+		httpserver.WriteError(w, r, err)
+		return
+	}
+	var head struct {
+		Layout string `json:"layout"`
+	}
+	if err := json.Unmarshal(b.Document, &head); err != nil || head.Layout != name || !flowName.MatchString(name) {
+		httpserver.WriteError(w, r, kernel.NewError(kernel.CodeValidationFailed, "the document's layout name must be %q", name))
+		return
+	}
+	data, err := pretty(b.Document)
+	if err != nil {
+		httpserver.WriteError(w, r, err)
+		return
+	}
+	h.apply(w, r, map[string][]byte{h.layoutFile(name): data}, nil)
+}
+
+func (h *uiEditor) deleteLayout(w http.ResponseWriter, r *http.Request) {
+	if !adminOnly(w, r) {
+		return
+	}
+	file := h.layoutFile(r.PathValue("name"))
 	if !h.exists(file) {
 		httpserver.WriteError(w, r, kernel.ErrNotFound)
 		return

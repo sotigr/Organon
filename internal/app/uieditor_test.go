@@ -88,6 +88,9 @@ func TestUIEditorSaves(t *testing.T) {
 	if _, ok := src["types"].(map[string]any)["task"]; !ok {
 		t.Fatal("source carries type metadata")
 	}
+	if ls := src["layouts"].([]any); len(ls) != 1 || ls[0].(map[string]any)["name"] != "main" {
+		t.Fatalf("source layouts: %v", src["layouts"])
+	}
 
 	about := map[string]any{"page": "about", "route": "/about", "body": map[string]any{"component": "text", "text": "Hi"}}
 	broken := map[string]any{"page": "about", "route": "/about", "body": map[string]any{"component": "text"}}
@@ -129,6 +132,22 @@ func TestUIEditorSaves(t *testing.T) {
 	}
 	if code, _ := do(admin, "PUT", "/v1/dev/manifest/ui/assets/..%2F..%2Fapp.json", []byte(`{}`)); code == 200 {
 		t.Fatalf("traversal: %d", code)
+	}
+	reloadAndSignIn()
+	// ADR 0029: layouts are saved like pages; a layout in use cannot be deleted.
+	side := map[string]any{"layout": "side", "sidebar": map[string]any{"component": "nav", "orientation": "vertical"}}
+	if code, out := do(admin, "PUT", "/v1/dev/manifest/ui/layouts/other", map[string]any{"document": side}); code != 400 || exists("ui/layouts/other.json") {
+		t.Fatalf("layout under another name: %d %v", code, out)
+	}
+	if code, out := do(admin, "PUT", "/v1/dev/manifest/ui/layouts/side", map[string]any{"document": side}); code != 200 || !exists("ui/layouts/side.json") {
+		t.Fatalf("save layout: %d %v", code, out)
+	}
+	reloadAndSignIn()
+	if code, out := do(admin, "DELETE", "/v1/dev/manifest/ui/layouts/main", nil); code != 422 || !exists("ui/layouts/main.json") {
+		t.Fatalf("delete a used layout: %d %v", code, out)
+	}
+	if code, _ := do(admin, "DELETE", "/v1/dev/manifest/ui/layouts/side", nil); code != 200 || exists("ui/layouts/side.json") {
+		t.Fatalf("delete layout: %d", code)
 	}
 	reloadAndSignIn()
 	app := map[string]any{"title": "T", "home": "projects", "nav": []any{map[string]any{"label": "X", "page": "aboutUs"}}}

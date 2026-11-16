@@ -2,6 +2,7 @@
   "title": "Tracker",
   "home": "projects",
   "linkHome": "sharedTask",
+  "layout": "main",
   "requireLogin": true,
   "languages": ["en", "el"],
   "speech": { "mode": "auto", "maxSeconds": 60 },

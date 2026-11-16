@@ -60,7 +60,7 @@ func uiCmd() *cobra.Command {
 	var out string
 	schema := &cobra.Command{
 		Use:   "schema",
-		Short: "Write JSON Schemas of ui/app.json and ui/pages/*.json for editor completion",
+		Short: "Write JSON Schemas of ui/app.json, ui/pages/*.json, and ui/layouts/*.json for editor completion",
 		Args:  cobra.NoArgs,
 		RunE: func(*cobra.Command, []string) error {
 			if err := os.MkdirAll(out, 0o755); err != nil {

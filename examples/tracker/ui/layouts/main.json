@@ -1,0 +1,25 @@
+{
+  "layout": "main",
+  "data": {
+    "assigned": { "query": { "type": "task", "where": { "and": [
+      { "field": "/assignee", "op": "eq", "value": "principal.id" },
+      { "field": "/status", "op": "in", "value": "['todo', 'in_progress']" } ] }, "limit": 200 } }
+  },
+  "header": { "component": "row", "gap": "lg", "children": [
+    { "component": "brand" },
+    { "component": "nav", "items": [
+      { "label": "Projects", "page": "projects", "active": "page.name == 'projects' || page.name == 'project'" },
+      { "label": "My tasks", "page": "myTasks", "badge": "{{ len(data.assigned ?? []) }}" },
+      { "label": "More", "items": [
+        { "label": "Open tasks", "page": "myTasks" },
+        { "label": "All projects", "page": "projects" }
+      ] }
+    ] },
+    { "component": "spacer" },
+    { "component": "languageSwitch" },
+    { "component": "userMenu", "items": [
+      { "label": "My tasks", "page": "myTasks" }
+    ] }
+  ] },
+  "footer": { "component": "text", "tone": "muted", "text": "Tracker · an Organon example app" }
+}

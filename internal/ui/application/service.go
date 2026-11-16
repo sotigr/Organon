@@ -70,10 +70,12 @@ type Bundle struct {
 	Version string `json:"version"`
 	App     any    `json:"app"`
 	// LoginRequired is true when an anonymous caller must sign in first.
-	LoginRequired bool                `json:"loginRequired"`
-	Pages         []PageDTO           `json:"pages"`
-	Types         map[string]TypeMeta `json:"types"`
-	Styles        string              `json:"styles,omitempty"`
+	LoginRequired bool      `json:"loginRequired"`
+	Pages         []PageDTO `json:"pages"`
+	// Layouts are the layouts of the pages in the bundle (ADR 0029).
+	Layouts []LayoutDTO         `json:"layouts"`
+	Types   map[string]TypeMeta `json:"types"`
+	Styles  string              `json:"styles,omitempty"`
 	// I18n is set when the app declares languages (ADR 0018).
 	I18n *I18n `json:"i18n,omitempty"`
 }
@@ -94,6 +96,15 @@ type PageDTO struct {
 	Route  string                  `json:"route"`
 	Params map[string]domain.Param `json:"params"`
 	Doc    json.RawMessage         `json:"doc"`
+	// Layout is the page's layout: a name of Layouts, "default" (the
+	// built-in header), or "none".
+	Layout string `json:"layout"`
+}
+
+// LayoutDTO is one layout of the bundle.
+type LayoutDTO struct {
+	Name string          `json:"name"`
+	Doc  json.RawMessage `json:"doc"`
 }
 
 // TypeMeta describes a type for rendering: field kinds that published
@@ -185,7 +196,7 @@ func (s *Service) Language(p accessapi.Principal, prefs []string) string {
 
 // Bundle returns the UI for p in the language Language picks from prefs.
 func (s *Service) Bundle(p accessapi.Principal, prefs []string) Bundle {
-	b := Bundle{Version: s.d.Version, Pages: []PageDTO{}, Types: map[string]TypeMeta{}}
+	b := Bundle{Version: s.d.Version, Pages: []PageDTO{}, Layouts: []LayoutDTO{}, Types: map[string]TypeMeta{}}
 	if !s.Enabled() {
 		return b
 	}
@@ -227,12 +238,25 @@ func (s *Service) Bundle(p accessapi.Principal, prefs []string) Bundle {
 		return b
 	}
 	used := map[string]bool{}
+	layouts := map[string]bool{}
 	for _, pg := range ui.Pages {
 		if !domain.VisibleTo(pg.Visible, p, now) {
 			continue
 		}
-		b.Pages = append(b.Pages, PageDTO{Name: pg.Name, Route: pg.Route, Params: pg.Params, Doc: pg.Doc})
+		b.Pages = append(b.Pages, PageDTO{Name: pg.Name, Route: pg.Route, Params: pg.Params, Doc: pg.Doc, Layout: pg.Layout})
+		layouts[pg.Layout] = true
 		for _, t := range pg.Types {
+			used[t] = true
+		}
+	}
+	// Only the layouts of the pages offered, so a bundle reveals nothing
+	// of frames its principal never sees.
+	for _, l := range ui.Layouts {
+		if !layouts[l.Name] {
+			continue
+		}
+		b.Layouts = append(b.Layouts, LayoutDTO{Name: l.Name, Doc: l.Doc})
+		for _, t := range l.Types {
 			used[t] = true
 		}
 	}

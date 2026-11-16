@@ -554,6 +554,19 @@ function StepsEditor({ steps, ctx, onChange }: { steps: any[]; ctx: Ctx; onChang
 
 const SCALARS = ["string", "integer", "number", "boolean"];
 
+/** LayoutSelect picks a ui/layouts name, default (the built-in header), or
+ * none (ADR 0029); empty inherits. */
+export function LayoutSelect({ src, value, onChange, inherit }: { src: UiSource; value?: string; onChange(v: string): void; inherit: string }) {
+  return (
+    <select value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
+      <option value="">({inherit})</option>
+      <option value="default">default: built-in header</option>
+      <option value="none">none: no frame</option>
+      {(src.layouts || []).map((l) => <option key={l.name} value={l.name}>{l.name}</option>)}
+    </select>
+  );
+}
+
 function PageInspector({ ctx, update }: { ctx: Ctx; update(d: Doc): void }) {
   const d = ctx.doc;
   const set = (k: string, v: any) => update(setAt(d, `/${k}`, v === "" ? undefined : v));
@@ -570,6 +583,8 @@ function PageInspector({ ctx, update }: { ctx: Ctx; update(d: Doc): void }) {
       <label>route * <span className="muted small">/path/:param</span></label><input className="mono" value={d.route ?? ""} onChange={(e) => set("route", e.target.value)} />
       <label>title <span className="muted small">{hint.text}</span></label><input value={d.title ?? ""} onChange={(e) => set("title", e.target.value)} />
       <label>visible <span className="muted small">expression over principal</span></label><input className="mono" value={d.visible ?? ""} onChange={(e) => set("visible", e.target.value)} placeholder="'admin' in principal.roles" />
+      <label>layout <span className="muted small">frame around the page</span></label>
+      <LayoutSelect src={ctx.src} value={d.layout} onChange={(v) => set("layout", v)} inherit="the app's layout" />
 
       <h2>Params</h2>
       {params.map(([k, p]) => (

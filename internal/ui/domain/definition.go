@@ -16,6 +16,8 @@ type Compiled struct {
 	// App is nil when the manifest has no UI.
 	App   *App
 	Pages []*Page // sorted by name
+	// Layouts are the ui/layouts files, sorted by name (ADR 0029).
+	Layouts []*Layout
 	// Styles is ui/styles.css, or nil.
 	Styles []byte
 	// Assets holds ui/assets/** by path below ui/assets/.
@@ -35,6 +37,9 @@ type App struct {
 	Home         string
 	RequireLogin bool
 	Nav          []NavItem
+	// Layout is the default layout of pages: a ui/layouts name, or
+	// LayoutDefault (the built-in header) when the app sets none.
+	Layout string
 	// Speech is set when the app turns on dictation (ADR 0028).
 	Speech *Speech
 	// Doc is the document sent to browsers (without $schema, x-layout).
@@ -72,7 +77,31 @@ type Page struct {
 	Types []string
 	// Texts are the page's translatable texts.
 	Texts []string
+	// Layout is the layout the page is shown in: a ui/layouts name,
+	// LayoutDefault, or LayoutNone.
+	Layout string
 }
+
+// Reserved layout names (ADR 0029): the built-in header made from
+// ui/app.json, and no frame at all.
+const (
+	LayoutDefault = "default"
+	LayoutNone    = "none"
+)
+
+// Layout is one compiled ui/layouts/<name>.json: the frame around the
+// pages that use it, made of header, sidebar, and footer regions.
+type Layout struct {
+	Name string
+	File string
+	// Doc is the document sent to browsers (without $schema, x-layout).
+	Doc json.RawMessage
+	// Types are the feature types the layout binds to.
+	Types []string
+}
+
+// LayoutRegions are the regions of a layout, in document order.
+var LayoutRegions = []string{"header", "sidebar", "footer"}
 
 // Param is a declared page parameter. Route parameters (":id") are
 // required; the others are optional query-string parameters.

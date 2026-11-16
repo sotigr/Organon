@@ -49,6 +49,23 @@ func TestUIBundle(t *testing.T) {
 	if nav := b.Body["app"].(map[string]any)["nav"].([]any); len(nav) != 2 {
 		t.Fatalf("nav: %v", nav)
 	}
+	// ADR 0029: each page names its layout, and the bundle carries the
+	// layouts of its pages only.
+	for _, p := range b.Body["pages"].([]any) {
+		if l := p.(map[string]any)["layout"]; l != "main" {
+			t.Fatalf("page %v layout %v", p.(map[string]any)["name"], l)
+		}
+	}
+	layouts := b.Body["layouts"].([]any)
+	if len(layouts) != 1 || layouts[0].(map[string]any)["name"] != "main" {
+		t.Fatalf("layouts: %v", layouts)
+	}
+	if _, ok := layouts[0].(map[string]any)["doc"].(map[string]any)["header"]; !ok {
+		t.Fatalf("layout document: %v", layouts[0])
+	}
+	if len(anon.Body["layouts"].([]any)) != 0 {
+		t.Fatal("layouts are hidden until login")
+	}
 }
 
 // ADR 0016: the renderer is served at / for every client-side route, with

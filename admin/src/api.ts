@@ -153,6 +153,8 @@ export const Api = {
   validateUi: (files: Record<string, string | null>) => api<{ valid: boolean; problems: UiProblem[] }>("POST", "/v1/ui/validate", { files }),
   savePage: (name: string, document: unknown, from?: string) => api<UiSaved>("PUT", `/v1/dev/manifest/ui/pages/${encodeURIComponent(name)}`, { document, from }),
   deletePage: (name: string) => api<UiSaved>("DELETE", `/v1/dev/manifest/ui/pages/${encodeURIComponent(name)}`),
+  saveLayout: (name: string, document: unknown) => api<UiSaved>("PUT", `/v1/dev/manifest/ui/layouts/${encodeURIComponent(name)}`, { document }),
+  deleteLayout: (name: string) => api<UiSaved>("DELETE", `/v1/dev/manifest/ui/layouts/${encodeURIComponent(name)}`),
   saveUiApp: (document: unknown) => api<UiSaved>("PUT", "/v1/dev/manifest/ui/app", { document }),
   saveStyles: (css: string) => api<UiSaved>("PUT", "/v1/dev/manifest/ui/styles", { css }),
   saveAsset: async (path: string, file: File) => {
@@ -173,6 +175,8 @@ export type UiSource = {
   app: any | null;
   styles: string | null;
   pages: { name: string; file: string; doc: any }[];
+  /** ui/layouts (ADR 0029). */
+  layouts: { name: string; file: string; doc: any }[];
   assets: string[];
   types: Record<string, any>;
 };

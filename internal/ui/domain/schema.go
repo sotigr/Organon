@@ -153,6 +153,7 @@ func PageSchema() map[string]any {
 			"params": obj{"type": "object", "additionalProperties": obj{"type": "object", "required": []string{"type"},
 				"additionalProperties": false, "properties": obj{"type": scalar, "format": obj{"type": "string"}}}},
 			"visible": obj{"type": "string", "description": "expression over principal; hides the page"},
+			"layout":  obj{"type": "string", "description": "a ui/layouts name, default (the built-in header), or none; default: the layout of ui/app.json"},
 			"state": obj{"type": "object", "additionalProperties": obj{"type": "object", "required": []string{"type"},
 				"additionalProperties": false, "properties": obj{
 					"type":    obj{"enum": []string{"string", "integer", "number", "boolean", "array", "object"}},
@@ -178,6 +179,7 @@ func AppSchema() map[string]any {
 			"requireLogin": obj{"type": "boolean", "default": true},
 			"notFound":     obj{"type": "string"},
 			"linkHome":     obj{"type": "string", "description": "page opened by share links, with params.id = the shared feature"},
+			"layout":       obj{"type": "string", "description": "the layout of pages that set none: a ui/layouts name, default (the built-in header), or none"},
 			"languages": obj{"type": "array", "minItems": 1, "uniqueItems": true,
 				"description": "UI languages; the first is the language the ui/ files are written in",
 				"items":       obj{"type": "string", "pattern": langRe.String()}},
@@ -197,6 +199,26 @@ func AppSchema() map[string]any {
 				}}},
 			"x-layout": obj{},
 		},
+	}
+}
+
+// LayoutSchema returns the JSON Schema of ui/layouts/*.json (ADR 0029).
+func LayoutSchema() map[string]any {
+	page := PageSchema()["properties"].(obj)
+	return obj{
+		"$schema": draft, "title": "Organon UI layout", "type": "object",
+		"required": []string{"layout"}, "additionalProperties": false,
+		"properties": obj{
+			"$schema":  obj{"type": "string"},
+			"layout":   obj{"type": "string", "pattern": nameRe.String()},
+			"state":    page["state"],
+			"data":     page["data"],
+			"header":   obj{"$ref": "#/$defs/node"},
+			"sidebar":  obj{"$ref": "#/$defs/node"},
+			"footer":   obj{"$ref": "#/$defs/node"},
+			"x-layout": obj{},
+		},
+		"$defs": uiDefs(),
 	}
 }
 

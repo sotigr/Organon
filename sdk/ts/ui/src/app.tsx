@@ -1,18 +1,19 @@
 // The app: shell, router, login, toasts, and the runtime caches
 // (permissions, ref labels, views) shared by every page.
 import { MicDock } from "./components/speech";
+import { goHome, LanguageSwitch } from "./components/shell";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { OrganonClient, type Feature } from "@organon/client";
 import { Node } from "./render";
 import {
-  buildPath, makeEval, matchRoute, PageContext, RuntimeContext, ScopeContext, useFuncs,
-  type EditorHooks, type PageState, type Runtime, type ViewSchema,
+  buildPath, makeEval, matchRoute, PageContext, RouteContext, RuntimeContext, ScopeContext, useFuncs,
+  type EditorHooks, type PageState, type Route, type Runtime, type ViewSchema,
 } from "./runtime";
 import { useSources } from "./sources";
 import { describe } from "./steps";
 import { template } from "./expr";
-import { direction, languageName, savedLanguage, saveLanguage, setLocale, translator, type Translate } from "./i18n";
-import type { Bundle, PageDTO, ParamSpec, Principal } from "./types";
+import { direction, savedLanguage, saveLanguage, setLocale, translator, type Translate } from "./i18n";
+import type { Bundle, LayoutDTO, PageDTO, ParamSpec, Principal } from "./types";
 
 interface Toast {
   id: number;
@@ -27,13 +28,15 @@ export interface RuntimeProviderProps {
   /** Navigation; defaults to the History API. */
   navigate?: (path: string) => void;
   onLogout?: () => void;
+  /** Switches the UI language; the languageSwitch component needs it. */
+  onLanguage?: (lang: string) => Promise<void>;
   editor?: EditorHooks;
   children: ReactNode;
 }
 
 /** RuntimeProvider supplies what nodes need: client, bundle, navigation,
  * batched permission checks, ref labels, and toasts. */
-export function RuntimeProvider({ client, bundle, principal, navigate, onLogout, editor, children }: RuntimeProviderProps) {
+export function RuntimeProvider({ client, bundle, principal, navigate, onLogout, onLanguage, editor, children }: RuntimeProviderProps) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [tick, setTick] = useState(0);
   const perms = useRef(new Map<string, boolean>());
@@ -123,9 +126,13 @@ export function RuntimeProvider({ client, bundle, principal, navigate, onLogout,
       },
     };
   }, [client, bundle, principal, editor, navigate, tick, t]);
+  const runtime: Runtime = useMemo(() => !onLanguage ? rt : {
+    ...rt,
+    setLanguage: (lang: string) => onLanguage(lang).catch((e) => rt.toast(describe(e, t), "danger")),
+  }, [rt, onLanguage]);
 
   return (
-    <RuntimeContext.Provider value={rt}>
+    <RuntimeContext.Provider value={runtime}>
       {children}
       <div className="o-toasts" role="status">
         {toasts.map((t) => <div key={t.id} className={`o-toast o-tone-${t.tone}`}>{t.text}</div>)}
@@ -140,9 +147,9 @@ function labelOf(f: Feature): string {
   return typeof l === "string" && l ? l : f.id.slice(0, 8);
 }
 
-function initialState(dto: PageDTO): Record<string, unknown> {
+function initialState(decls: Record<string, { type: string; default?: unknown }> | undefined): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(dto.doc.state || {})) {
+  for (const [k, v] of Object.entries(decls || {})) {
     out[k] = v.default ?? ({ string: "", integer: 0, number: 0, boolean: false, array: [], object: {} } as Record<string, unknown>)[v.type] ?? null;
   }
   return out;
@@ -156,7 +163,7 @@ export function PageView({ dto, params, setTitle = true }: { dto: PageDTO; param
 function PageInner({ dto, params, setTitle }: { dto: PageDTO; params: Record<string, unknown>; setTitle: boolean }) {
   const rtx = useRuntimeOrThrow();
   const fns = useFuncs();
-  const [state, setStateMap] = useState(() => initialState(dto));
+  const [state, setStateMap] = useState(() => initialState(dto.doc.state));
   const [dialog, setDialog] = useState<string>();
   const base = useMemo(() => ({ principal: rtx.principal ?? { id: "", kind: "anonymous", roles: [] }, params, state }), [rtx.principal, params, state]);
   const data = useSources(dto.doc.data, base);
@@ -206,17 +213,6 @@ export function resolve(bundle: Bundle, pathname: string, search: string): { dto
     return { dto, params };
   }
   return null;
-}
-
-/** LanguageSwitch offers the app's languages when it has more than one. */
-function LanguageSwitch({ bundle, t, onChange }: { bundle: Bundle; t: Translate; onChange(lang: string): Promise<void> }) {
-  const i18n = bundle.i18n;
-  if (!i18n || i18n.languages.length < 2) return null;
-  return (
-    <select className="o-input o-lang" aria-label={t("Language")} value={i18n.language} onChange={(e) => onChange(e.target.value)}>
-      {i18n.languages.map((l) => <option key={l} value={l} lang={l}>{languageName(l)}</option>)}
-    </select>
-  );
 }
 
 function Login({ client, bundle, t, onLogin, onLanguage }: { client: OrganonClient; bundle: Bundle; t: Translate; onLogin: () => void; onLanguage(lang: string): Promise<void> }) {
@@ -300,15 +296,16 @@ function usePath(): string {
   return path;
 }
 
-function Shell({ bundle, principal, onLanguage, children }: { bundle: Bundle; principal: Principal | null; onLanguage(lang: string): Promise<void>; children: ReactNode }) {
+/** Shell is the built-in frame (layout "default"): a header made from
+ * ui/app.json. */
+function Shell({ bundle, principal, children }: { bundle: Bundle; principal: Principal | null; children: ReactNode }) {
   const rt = useRuntimeOrThrow();
   const app = bundle.app;
   const path = location.pathname;
   return (
     <div className="o-app">
       <header className="o-header">
-        <a className="o-brand" href="/" onClick={(e) => { e.preventDefault(); principal?.kind === "link" && app.linkHome ? rt.navigate(app.linkHome, { id: principal.object })
-          : rt.navigate(app.home); }}>
+        <a className="o-brand" href="/" onClick={(e) => { e.preventDefault(); goHome(rt); }}>
           {app.logo && <img src={`/assets/app/${app.logo.replace(/^assets\//, "")}`} alt="" />}
           <span>{app.title ? rt.t(app.title) : ""}</span>
         </a>
@@ -317,22 +314,85 @@ function Shell({ bundle, principal, onLanguage, children }: { bundle: Bundle; pr
             const params: Record<string, unknown> = {};
             const ev = makeEval({ principal }, {}, (s) => rt.t(s));
             for (const [k, v] of Object.entries(n.params || {})) params[k] = ev.ex(v);
-            const href = rt.href(n.page, params);
+            const page = n.page ?? "";
+            const href = rt.href(page, params);
             return (
               <a key={i} href={href} className={href === path ? "o-nav-active" : ""}
-                onClick={(e) => { e.preventDefault(); rt.navigate(n.page, params); }}>
+                onClick={(e) => { e.preventDefault(); rt.navigate(page, params); }}>
                 {ev.text(n.label)}
               </a>
             );
           })}
         </nav>
-        <LanguageSwitch bundle={bundle} t={rt.t} onChange={(l) => onLanguage(l).catch((e) => rt.toast(describe(e, rt.t), "danger"))} />
+        <LanguageSwitch bundle={bundle} t={rt.t} onChange={(l) => void rt.setLanguage?.(l)} />
         {principal && <button className="o-button o-button-link" onClick={() => rt.logout()}>{rt.t("Sign out")}</button>}
       </header>
       <main className="o-main">{children}</main>
       {app.speech && <MicDock cfg={app.speech} />}
     </div>
   );
+}
+
+/** LayoutView is a ui/layouts frame (ADR 0029): header, sidebar, and
+ * footer regions around the page, with their own state, dialogs, and data
+ * sources. It stays mounted while pages of the same layout change, so its
+ * sources load once; its expressions see the page shown (page.name,
+ * page.params), not the page's data. */
+export function LayoutView({ layout, route, children }: { layout: LayoutDTO; route: Route | null; children: ReactNode }) {
+  const rtx = useRuntimeOrThrow();
+  const doc = layout.doc;
+  const [state, setStateMap] = useState(() => initialState(doc.state));
+  const [dialog, setDialog] = useState<string>();
+  const routeKey = JSON.stringify(route);
+  const page = useMemo(() => ({ name: route?.name ?? "", params: route?.params ?? {} }), [routeKey]);
+  const base = useMemo(() => ({ principal: rtx.principal ?? { id: "", kind: "anonymous", roles: [] }, page, state }), [rtx.principal, page, state]);
+  const data = useSources(doc.data, base);
+  const dataKey = JSON.stringify(Object.values(data).map((v) => (Array.isArray(v) ? v.map((r) => `${r.id}@${r.version}`) : v && (v as { version?: number }).version)));
+  const env = useMemo(() => ({ ...base, data }), [base, dataKey, rtx]);
+  const ctx: PageState = useMemo(() => ({
+    name: `layout:${layout.name}`, state, dialog,
+    setState: (k, v) => setStateMap((s) => ({ ...s, [k]: v })),
+    openDialog: setDialog,
+    closeDialog: () => setDialog(undefined),
+  }), [layout.name, state, dialog]);
+  const region = (name: "header" | "sidebar" | "footer", Tag: "header" | "aside" | "footer") => doc[name] && (
+    <Tag className={`o-layout-${name}`}>
+      <Node node={doc[name]!} path={`/${name}`} />
+    </Tag>
+  );
+  // The page inside sets its own page and scope contexts.
+  return (
+    <PageContext.Provider value={ctx}>
+      <ScopeContext.Provider value={env}>
+        <div className={`o-app o-layout o-layout-${layout.name}${doc.sidebar ? " o-has-sidebar" : ""}`}>
+          {region("header", "header")}
+          <div className="o-layout-body">
+            {region("sidebar", "aside")}
+            <main className="o-main">{children}</main>
+          </div>
+          {region("footer", "footer")}
+          {rtx.bundle.app.speech && <MicDock cfg={rtx.bundle.app.speech} />}
+        </div>
+      </ScopeContext.Provider>
+    </PageContext.Provider>
+  );
+}
+
+/** Frame puts a page in its layout: a ui/layouts frame, the built-in
+ * header ("default"), or nothing ("none"). */
+function Frame({ name, route, children }: { name: string; route: Route | null; children: ReactNode }) {
+  const rt = useRuntimeOrThrow();
+  if (name === "none") {
+    return (
+      <div className="o-app o-layout-none">
+        <main className="o-main">{children}</main>
+        {rt.bundle.app.speech && <MicDock cfg={rt.bundle.app.speech} />}
+      </div>
+    );
+  }
+  const layout = rt.bundle.layouts?.find((l) => l.name === name);
+  if (layout) return <LayoutView key={layout.name} layout={layout} route={route}>{children}</LayoutView>;
+  return <Shell bundle={rt.bundle} principal={rt.principal}>{children}</Shell>;
 }
 
 function NotFound({ text }: { text?: string }) {
@@ -411,12 +471,16 @@ export function OrganonApp({ client: given }: OrganonAppProps) {
   const found = pathname === "/" && (isLink || !bundle.pages.some((p) => p.route === "/"))
     ? (() => { const home = bundle.pages.find((p) => p.name === start); return home ? { dto: home, params: startParams } : null; })()
     : resolve(bundle, pathname, search);
+  const route: Route | null = found ? { name: found.dto.name, params: found.params } : null;
   return (
-    <RuntimeProvider client={client} bundle={bundle} principal={principal} onLogout={load}>
-      <Shell bundle={bundle} principal={principal} onLanguage={changeLanguage}>
-        {found ? <PageView dto={found.dto} params={found.params} />
-          : <NotFound text={bundle.app.notFound} />}
-      </Shell>
+    <RuntimeProvider client={client} bundle={bundle} principal={principal} onLogout={load} onLanguage={changeLanguage}>
+      <RouteContext.Provider value={route}>
+        {/* Unknown routes get the app's default layout. */}
+        <Frame name={found ? found.dto.layout ?? "default" : bundle.app.layout ?? "default"} route={route}>
+          {found ? <PageView dto={found.dto} params={found.params} />
+            : <NotFound text={bundle.app.notFound} />}
+        </Frame>
+      </RouteContext.Provider>
     </RuntimeProvider>
   );
 }

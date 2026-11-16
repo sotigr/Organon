@@ -71,7 +71,7 @@ type Step struct {
 }
 
 // Families of the component catalog, in palette order.
-var Families = []string{"layout", "text", "data", "forms", "charts"}
+var Families = []string{"layout", "text", "data", "forms", "charts", "shell"}
 
 var (
 	gapEnum   = []string{"none", "sm", "md", "lg"}
@@ -80,6 +80,18 @@ var (
 	widgEnum  = []string{"auto", "text", "textarea", "number", "select", "checkbox", "datetime", "ref", "file", "decimal"}
 	pSource   = Prop{Name: "source", Kind: KindSource, Doc: "Data source of the page"}
 	pChildren = Prop{Name: "children", Kind: KindChildren}
+	// navLink is one link of a nav or user menu (ADR 0029).
+	navLink = []Prop{
+		{Name: "label", Kind: KindText, Required: true},
+		{Name: "page", Kind: KindPage}, {Name: "params", Kind: KindParams},
+		{Name: "url", Kind: KindText, Plain: true, Doc: "An http(s)/mailto URL instead of a page; opens in a new tab"},
+		{Name: "icon", Kind: KindText, Plain: true, Doc: "An image from ui/assets (assets/<path>) shown before the label"},
+		{Name: "badge", Kind: KindText, Doc: "A small count or label after the text; hidden when empty or 0"},
+		{Name: "visible", Kind: KindExpr, Want: "bool"},
+		{Name: "active", Kind: KindExpr, Want: "bool", Doc: "Highlight the link (default: when its page is shown)"},
+	}
+	navItem = append(append([]Prop{}, navLink...),
+		Prop{Name: "items", Kind: KindObjects, Item: navLink, Doc: "A group: a drop-down (horizontal) or an indented list (vertical) of links"})
 )
 
 var components = []Component{
@@ -178,6 +190,20 @@ var components = []Component{
 		{Name: "series", Kind: KindObjects, Item: []Prop{
 			{Name: "label", Kind: KindText, Required: true}, {Name: "value", Kind: KindExpr, Required: true, Want: "number"}}},
 		{Name: "height", Kind: KindInt}}},
+
+	// Shell: the parts of an app frame, for ui/layouts (ADR 0029); pages
+	// may use them too.
+	{Name: "brand", Family: "shell", Doc: "The app logo and title, linking to the home page.", Props: []Prop{
+		{Name: "text", Kind: KindText, Doc: "Default: the title of ui/app.json"}}},
+	{Name: "nav", Family: "shell", Doc: "Navigation links and groups; without items, the nav of ui/app.json. Links to pages the user cannot see are left out.", Props: []Prop{
+		{Name: "items", Kind: KindObjects, Item: navItem},
+		{Name: "orientation", Kind: KindEnum, Enum: []string{"horizontal", "vertical"}, Doc: "horizontal (default) collapses into a menu button on narrow screens"}}},
+	{Name: "userMenu", Family: "shell", Doc: "The signed-in user's menu: extra links and Sign out. Hidden for anonymous visitors.", Props: []Prop{
+		{Name: "label", Kind: KindText, Doc: "Default: the user's name"},
+		{Name: "items", Kind: KindObjects, Item: navLink},
+		{Name: "signOut", Kind: KindBool, Doc: "false: no Sign out entry (default true)"}}},
+	{Name: "languageSwitch", Family: "shell", Doc: "The language picker; shown when ui/app.json lists several languages."},
+	{Name: "spacer", Family: "shell", Doc: "Takes the free space in a row, pushing what follows to the end."},
 }
 
 var pConfirm = Prop{Name: "confirm", Kind: KindText, Doc: "Ask before running"}

@@ -13,7 +13,7 @@ import { Runs } from "./pages/Runs";
 import { Deploys } from "./pages/Deploys";
 import { Audit } from "./pages/Audit";
 import { UiBuilder } from "./pages/UiBuilder";
-import { UiApp, UiPages, UiStyles } from "./pages/UiPages";
+import { UiApp, UiLayout, UiPages, UiStyles } from "./pages/UiPages";
 import { Users } from "./pages/people/Users";
 import { UserPage } from "./pages/people/UserPage";
 import { ServiceAccountPage, ServiceAccounts, TeamPage, Teams } from "./pages/people/Teams";
@@ -68,6 +68,7 @@ function App() {
       break;
     case "ui":
       page = parts[1] === "pages" && parts[2] ? <UiBuilder key={parts[2]} name={decodeURIComponent(parts[2])} />
+        : parts[1] === "layouts" && parts[2] ? <UiLayout key={parts[2]} name={decodeURIComponent(parts[2])} />
         : parts[1] === "app" ? <UiApp /> : parts[1] === "styles" ? <UiStyles /> : <UiPages />;
       break;
     case "runs":

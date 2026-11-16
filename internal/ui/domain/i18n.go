@@ -268,6 +268,11 @@ func (u *Compiled) needs(types schemaapi.TypeRegistry) i18nNeeds {
 			shown[t] = true
 		}
 	}
+	for _, l := range u.Layouts {
+		for _, t := range l.Types {
+			shown[t] = true
+		}
+	}
 	for _, t := range BuiltinTexts {
 		set[t] = true
 	}

@@ -1,7 +1,9 @@
 // UI builder home (ADR 0016): the pages of ui/, the app shell (ui/app.json),
-// the app's styles (ui/styles.css), and assets (ui/assets/).
+// layouts (ui/layouts, ADR 0029), the app's styles (ui/styles.css), and
+// assets (ui/assets/).
 import { useEffect, useState } from "react";
 import { Api, ApiError, describeError, type UiProblem, type UiSource } from "../api";
+import { LayoutSelect } from "./UiBuilder";
 
 function Problems({ problems }: { problems: UiProblem[] }) {
   if (!problems.length) return null;
@@ -23,6 +25,7 @@ function useSource(): [UiSource | undefined, string, () => void] {
 export function UiPages() {
   const [src, err] = useSource();
   const [name, setName] = useState("");
+  const [layout, setLayout] = useState("");
   return (
     <>
       <div className="toolbar">
@@ -49,6 +52,24 @@ export function UiPages() {
           ))}
         </tbody>
       </table>
+      <h2>Layouts</h2>
+      <p className="muted">Frames around pages: header, sidebar, and footer regions (<span className="mono">ui/layouts/</span>). Pages use the layout of the app shell unless they name their own.</p>
+      <table>
+        <thead><tr><th>Layout</th><th>Regions</th><th>File</th></tr></thead>
+        <tbody>
+          {src?.layouts?.map((l) => (
+            <tr key={l.name}>
+              <td><a href={`#/ui/layouts/${encodeURIComponent(l.name)}`}>{l.name}</a>{src.app?.layout === l.name && <span className="pill"> app default</span>}</td>
+              <td>{["header", "sidebar", "footer"].filter((r) => l.doc[r]).join(", ")}</td>
+              <td className="mono">{l.file}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="row" style={{ marginTop: 8 }}>
+        <input placeholder="newLayout" value={layout} onChange={(e) => setLayout(e.target.value)} style={{ width: 160 }} />
+        <a href={`#/ui/layouts/${encodeURIComponent(layout || "main")}`}><button>New layout</button></a>
+      </div>
       <p className="muted">Pages are JSON files in <span className="mono">ui/pages/</span>; the builder writes them under <span className="mono">organon dev</span>. Agents and people can edit the same files: run <span className="mono">organon ui catalog</span> for the components and <span className="mono">organon validate</span> to check them.</p>
     </>
   );
@@ -90,6 +111,8 @@ export function UiApp() {
         <select value={doc.logo ?? ""} onChange={(e) => set("logo", e.target.value)}><option value=""></option>{src.assets.map((a) => <option key={a} value={`assets/${a}`}>{a}</option>)}</select>
         <label className="inline"><input type="checkbox" checked={doc.requireLogin !== false} onChange={(e) => set("requireLogin", e.target.checked ? undefined : false)} /> require login (otherwise pages visible to anonymous callers are public)</label>
         <label>not found text</label><input value={doc.notFound ?? ""} onChange={(e) => set("notFound", e.target.value)} />
+        <label>layout of pages</label>
+        <LayoutSelect src={src} value={doc.layout} onChange={(v) => set("layout", v)} inherit="default: built-in header" />
         <h2>Navigation</h2>
         {nav.map((n, i) => (
           <div key={i} className="row" style={{ gap: 4, flexWrap: "nowrap", marginBottom: 4 }}>
@@ -101,6 +124,69 @@ export function UiApp() {
         ))}
         <button className="link" onClick={() => set("nav", [...nav, { label: "", page: src.pages[0]?.name }])}>+ nav entry</button>
       </div>
+      <Problems problems={problems} />
+    </>
+  );
+}
+
+const NEW_LAYOUT = (name: string) => ({
+  layout: name,
+  header: { component: "row", gap: "lg", children: [
+    { component: "brand" }, { component: "nav" }, { component: "spacer" }, { component: "languageSwitch" }, { component: "userMenu" },
+  ] },
+});
+
+/** UiLayout edits one ui/layouts file as JSON, validated as you type
+ * (ADR 0029). Pages preview inside their layout in the app itself. */
+export function UiLayout({ name }: { name: string }) {
+  const [src, err, load] = useSource();
+  const [text, setText] = useState<string>();
+  const [exists, setExists] = useState(false);
+  const [problems, setProblems] = useState<UiProblem[]>([]);
+  const [status, setStatus] = useState("");
+  useEffect(() => {
+    if (!src || text !== undefined) return;
+    const l = src.layouts?.find((x) => x.name === name);
+    setExists(!!l);
+    setText(JSON.stringify(l ? l.doc : NEW_LAYOUT(name), null, 2));
+  }, [src]);
+  const file = src?.layouts?.find((x) => x.name === name)?.file ?? `ui/layouts/${name}.json`;
+  useEffect(() => {
+    if (text === undefined) return;
+    const t = setTimeout(() => Api.validateUi({ [file]: text }).then((r) => setProblems(r.problems.filter((p) => p.file === file)), () => undefined), 400);
+    return () => clearTimeout(t);
+  }, [text, file]);
+  if (!src || text === undefined) return <p className="error">{err}</p>;
+  const fail = (e: unknown) => {
+    if (e instanceof ApiError && e.problem.problems) setProblems(e.problem.problems as UiProblem[]);
+    setStatus(`Not saved: ${describeError(e)}`);
+  };
+  const save = () => {
+    let doc: unknown;
+    try {
+      doc = JSON.parse(text);
+    } catch (e) {
+      setStatus(`Not saved: ${describeError(e)}`);
+      return;
+    }
+    Api.saveLayout(name, doc).then(() => { setStatus(`Saved ${file}.`); setExists(true); load(); }, fail);
+  };
+  const remove = () => {
+    if (!confirm(`Delete layout ${name}?`)) return;
+    Api.deleteLayout(name).then(() => { location.hash = "#/ui"; }, fail);
+  };
+  return (
+    <>
+      <div className="toolbar">
+        <h1 style={{ margin: 0 }}><a href="#/ui">UI</a> / layout {name}</h1>
+        <div className="row">
+          {exists && <button disabled={!src.dev} onClick={remove}>Delete</button>}
+          <button className="primary" disabled={!src.dev} onClick={save}>Save</button>
+        </div>
+      </div>
+      <p className={status.startsWith("Not") ? "error" : "okmsg"}>{status}</p>
+      <p className="muted">Regions <span className="mono">header</span>, <span className="mono">sidebar</span>, and <span className="mono">footer</span> are component trees; the shell components <span className="mono">brand</span>, <span className="mono">nav</span>, <span className="mono">userMenu</span>, <span className="mono">languageSwitch</span>, and <span className="mono">spacer</span> build navigation. Expressions see <span className="mono">principal</span>, <span className="mono">page.name</span>, <span className="mono">page.params</span>, and the layout's own <span className="mono">data</span> and <span className="mono">state</span>.</p>
+      <textarea className="ui-css mono" value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} />
       <Problems problems={problems} />
     </>
   );

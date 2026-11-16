@@ -30,7 +30,7 @@ func UICatalog() uidomain.Catalog { return uidomain.GetCatalog() }
 
 // UISchemas returns the JSON Schemas of ui/ files by file name.
 func UISchemas() map[string]map[string]any {
-	return map[string]map[string]any{"ui-app.json": uidomain.AppSchema(), "ui-page.json": uidomain.PageSchema(),
+	return map[string]map[string]any{"ui-app.json": uidomain.AppSchema(), "ui-page.json": uidomain.PageSchema(), "ui-layout.json": uidomain.LayoutSchema(),
 		"ui-i18n.json": uidomain.I18nSchema()}
 }
 

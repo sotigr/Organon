@@ -13,8 +13,16 @@ export interface Principal {
 
 export interface NavItem {
   label: string;
-  page: string;
+  page?: string;
   params?: Record<string, unknown>;
+  /** Layout navigation (ADR 0029): an external link instead of a page. */
+  url?: string;
+  icon?: string;
+  badge?: string;
+  visible?: Expr;
+  active?: Expr;
+  /** A group of links. */
+  items?: NavItem[];
 }
 
 export interface AppDoc {
@@ -24,6 +32,8 @@ export interface AppDoc {
   /** The page share-link holders open, with params.id = the shared feature. */
   linkHome?: string;
   nav?: NavItem[];
+  /** The default layout of pages (ADR 0029). */
+  layout?: string;
   requireLogin?: boolean;
   notFound?: string;
   /** Dictation into text fields (ADR 0028); absent when off. */
@@ -83,6 +93,7 @@ export interface PageDoc {
   route: string;
   params?: Record<string, ParamSpec>;
   visible?: Expr;
+  layout?: string;
   state?: Record<string, { type: string; default?: unknown }>;
   data?: Record<string, SourceDoc>;
   body: NodeDoc;
@@ -93,6 +104,24 @@ export interface PageDTO {
   route: string;
   params: Record<string, ParamSpec> | null;
   doc: PageDoc;
+  /** The page's layout: a name of Bundle.layouts, "default" (the built-in
+   * header), or "none". Absent in older bundles: "default". */
+  layout?: string;
+}
+
+/** A ui/layouts document (ADR 0029): the frame around its pages. */
+export interface LayoutDoc {
+  layout: string;
+  state?: Record<string, { type: string; default?: unknown }>;
+  data?: Record<string, SourceDoc>;
+  header?: NodeDoc;
+  sidebar?: NodeDoc;
+  footer?: NodeDoc;
+}
+
+export interface LayoutDTO {
+  name: string;
+  doc: LayoutDoc;
 }
 
 export interface FieldMeta {
@@ -144,6 +173,8 @@ export interface Bundle {
   app: AppDoc;
   loginRequired: boolean;
   pages: PageDTO[];
+  /** The layouts of the pages in the bundle. */
+  layouts?: LayoutDTO[];
   types: Record<string, TypeMeta>;
   styles?: string;
   i18n?: I18nDoc;

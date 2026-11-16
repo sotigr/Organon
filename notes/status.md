@@ -1,6 +1,6 @@
 # Status
 
-_Last updated: 2026-11-06_
+_Last updated: 2026-11-16_
 
 ## Current phase: 10 – PostgreSQL + Valkey (next; needs Docker running).
 
@@ -401,3 +401,16 @@ Plan: ~/.claude/plans/read-the-docs-then-reflective-valiant.md (milestones M1–
   300 ms record nothing and hint "Hold the microphone while you speak."; server silence auto-stop removed. Texts
   "Hold to dictate"/"Release to stop" replace "Dictate"/"Stop dictation". Verified in headless Brave (tap, mouse hold,
   key hold).
+- UI layouts (2026-11-16, ADR 0029): `ui/layouts/<name>.json` (regions header/sidebar/footer, own state + data;
+  scope principal, page.name/params, data, state), `layout` in ui/app.json (default of pages) and pages
+  (`default` = built-in header, `none` = no frame). Compiler: internal/ui/domain/layout.go (+ navItems/assetRef in
+  compile.go), unused-layout warning, layout texts are app texts, layout types in i18n needs, LayoutSchema
+  (`organon ui schema` writes ui-layout.json). Catalog family `shell`: brand, nav (items with page|url, icon, badge,
+  visible, active; groups one level), userMenu, languageSwitch, spacer. Bundle: PageDTO.layout, `layouts` = those of
+  offered pages. Renderer: components/shell.tsx, LayoutView/Frame in app.tsx (layout stays mounted across its pages),
+  RouteContext, Runtime.setLanguage; base.css `o-layout-*`, `o-nav*` (collapse below 720 px). Admin: layouts list,
+  JSON editor (UiLayout) with live validation, layout pickers; dev endpoints PUT/DELETE /v1/dev/manifest/ui/layouts/{name}.
+  Tracker: ui/layouts/main.json (app default), sharedTask stays on `default`. Tests: domain rules + TestLayouts,
+  e2e bundle/link bundle, uieditor save/delete.
+  **Not yet done on this machine (no Node/pnpm here):** `make sdk` (typecheck + texts test), `make ui`, `make web`
+  (admin/dist and web/dist are stale until rebuilt), visual check in a browser. Version not bumped (docs say "since 1.2").

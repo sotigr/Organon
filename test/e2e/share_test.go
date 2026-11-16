@@ -90,6 +90,11 @@ func TestShareLinks(t *testing.T) {
 		if !strings.Contains(bundle.Raw, `"name":"sharedTask"`) || strings.Contains(bundle.Raw, `"name":"projects"`) || bundle.Body["loginRequired"] == true {
 			t.Fatalf("link bundle: %s", bundle.Raw)
 		}
+		// ADR 0029: the link page keeps the built-in header, so the app's
+		// layout (with its users-only navigation) is not sent.
+		if layouts := bundle.Body["layouts"].([]any); len(layouts) != 0 || !strings.Contains(bundle.Raw, `"layout":"default"`) {
+			t.Fatalf("link bundle layouts: %s", bundle.Raw)
+		}
 		if res, _ := noFollow.Get(w.s.url + "/s/" + tok + "x"); res.Header.Get("Location") != "/?link=invalid" {
 			t.Fatalf("bad token: %v", res.Header)
 		}

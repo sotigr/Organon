@@ -128,3 +128,8 @@
 | Topic | Decision |
 |---|---|
 | Framework versions | The 2026-11-07 image counts as 1.0.0; this release (dictation, stale-cookie fix, ...) is 1.1.0. `platform/buildinfo.Version` is the source of truth (bumped per published image); `organon version`, `organon --version`, `organond --version`, startup log. Images are tagged `:<version>` and `:latest`; guide features after 1.0 say "since 1.x". The `framework` range check and dev waiting on an invalid startup manifest were not chosen for now. Publishing: the agent commits and builds; the user pushes. |
+
+## 2026-11-16
+| Topic | Decision |
+|---|---|
+| Custom navigation (ADR 0029) | Named layouts in `ui/layouts/` chosen per app (`ui/app.json` `layout`) and per page; layouts may have their own data sources (badges); header, sidebar, and footer regions in the first version; declarative only (catalog components + CSS, no custom HTML/JS) |

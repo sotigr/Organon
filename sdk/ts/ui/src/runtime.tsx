@@ -32,7 +32,16 @@ export interface Runtime {
   t: Translate;
   /** views returns the caller's create/update view schemas of a type. */
   views(type: string): Promise<{ create: ViewSchema; update: ViewSchema }>;
+  /** setLanguage switches the UI language (absent: no switch offered). */
+  setLanguage?(lang: string): Promise<void>;
   editor?: EditorHooks;
+}
+
+/** The page shown now, for layouts (page.name, page.params) and for
+ * highlighting navigation links (ADR 0029). */
+export interface Route {
+  name: string;
+  params: Record<string, unknown>;
 }
 
 export interface ViewSchema {
@@ -52,6 +61,7 @@ export interface PageState {
 export const RuntimeContext = createContext<Runtime | null>(null);
 export const PageContext = createContext<PageState | null>(null);
 export const ScopeContext = createContext<Env>({});
+export const RouteContext = createContext<Route | null>(null);
 
 export function useRuntime(): Runtime {
   const rt = useContext(RuntimeContext);

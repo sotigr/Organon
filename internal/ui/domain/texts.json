@@ -1,4 +1,5 @@
 [
+  "Account",
   "Authentication code",
   "Cannot move from {{ from }} to {{ to }}.",
   "Choose…",
@@ -9,6 +10,7 @@
   "Hold to dictate",
   "Language",
   "Listening…",
+  "Menu",
   "Microphone access was denied.",
   "No",
   "No data.",

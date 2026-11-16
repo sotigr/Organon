@@ -136,6 +136,7 @@ myapp/
   tests/*.test.json          # manifest tests                                                §16
   ui/app.json                # UI shell                                                      §13
   ui/pages/*.json            # UI pages                                                      §13
+  ui/layouts/*.json          # UI frames: header, sidebar, footer, navigation                 §13
   ui/i18n/<lang>.json        # UI translations                                               §14
   ui/styles.css, ui/assets/**  # look, images, fonts                                         §13
   modules/<name>/...         # optional grouping: types, traits, policies, flows, nodes, ui/pages
@@ -844,6 +845,43 @@ props are errors.**
   `set` a state variable to `result.output.url` and `open` a dialog that
   shows it (see the tracker's `ui/pages/task.json`).
 - Sign-in by password, OIDC, and MFA is built in.
+- `"layout": "<name>"` (since 1.2) puts pages in a layout (below) instead
+  of the built-in header; `nav` then only feeds a `nav` component without
+  `items` and pages with `"layout": "default"`.
+
+### Layouts: `ui/layouts/<name>.json` (since 1.2)
+
+A layout is the frame around pages: regions `header`, `sidebar`, `footer`
+(component trees, at least one), with optional `state` and `data` like a
+page. `ui/app.json` `layout` sets the default; a page's `layout`
+overrides it (`"default"` = built-in header, `"none"` = no frame).
+
+```json
+{ "layout": "main",
+  "data": { "assigned": { "query": { "type": "task", "where": { "and": [
+    { "field": "/assignee", "op": "eq", "value": "principal.id" },
+    { "field": "/status", "op": "in", "value": "['todo', 'in_progress']" } ] } } } },
+  "header": { "component": "row", "gap": "lg", "children": [
+    { "component": "brand" },
+    { "component": "nav", "items": [
+      { "label": "Projects", "page": "projects", "active": "page.name == 'projects' || page.name == 'project'" },
+      { "label": "My tasks", "page": "myTasks", "badge": "{{ len(data.assigned ?? []) }}" },
+      { "label": "More", "items": [ { "label": "Docs", "url": "https://example.org" } ] } ] },
+    { "component": "spacer" }, { "component": "languageSwitch" },
+    { "component": "userMenu", "items": [ { "label": "Settings", "page": "settings" } ] } ] },
+  "footer": { "component": "text", "tone": "muted", "text": "© Example" } }
+```
+
+- Layout expressions see `principal`, `page.name`, `page.params`, and the
+  layout's own `data`/`state`; **not** the page's `data` or `params`.
+- Nav items: `label` + exactly one of `page` (+`params`) / `url`, or
+  `items` (a group, one level deep; drop-down when horizontal). Optional
+  `icon` (`assets/<path>`), `badge` (text, hidden when empty or `0`),
+  `visible`, `active` (default: its page is shown).
+- Links to pages the user cannot see are hidden automatically.
+- `nav` `orientation: "vertical"` for sidebars; horizontal navs collapse
+  into a menu button on narrow screens. `userMenu` (`label`, `items`,
+  `signOut`) is hidden for anonymous and link principals.
 
 ### Page: `ui/pages/<name>.json`
 
@@ -899,6 +937,7 @@ props are errors.**
 | Data | `table` (columns by `field` or `value`, `display`, per-column `page`; `rowPage`/`rowParams`), `list` (`item` template), `field`, `detail`, `stat` (`format: number\|percent\|date`), `empty`, `preview` (images, PDF, video, audio from a blob field; `display: inline` (default) or `modal` for a thumbnail/link that opens a viewer), `transitions` (state-machine buttons the user may run now) |
 | Forms | `form` (`mode: create\|update\|action`; generated from the user's create or update view, or the action flow's `input`; `fields: [{path, label, widget, help, labelField, speech}]`; `on.submit` steps see `result` and `form.values`), `button` (`variant`, `on.click`), `menu` (`items: [{label, visible, steps}]`) |
 | Charts | `board` (kanban by a state-machine field; dragging runs the transition), `chart` (`kind: bar\|line\|pie`; `source` + `groupBy` [+ `value`, `op: count\|sum\|avg`] or explicit `series`) |
+| Shell (since 1.2) | `brand` (`text`), `nav` (`items`, `orientation`), `userMenu` (`label`, `items`, `signOut`), `languageSwitch`, `spacer`; see Layouts |
 
 Every component also takes `visible` (an expression) and `class` (for CSS).
 Inside `table`, `list`, and `board` rows, `item` and `index` are in scope.
@@ -956,6 +995,9 @@ rely on policies for security.
   `.o-button-primary`, and `.o-badge-<enum value>`, or your own `class`
   names.
 - Pages carry `data-page="<name>"`.
+- Layouts: `.o-layout-header`, `.o-layout-sidebar` (`--o-sidebar-width`),
+  `.o-layout-footer`, `.o-layout-<name>`, `.o-navbar`, `.o-nav-link`,
+  `.o-nav-active`, `.o-nav-badge`, `.o-user-menu`.
 - Images and fonts go in `ui/assets/`. External URLs are blocked by the
   CSP.
 
@@ -1263,4 +1305,5 @@ uses nearly every feature:
 | `ui/pages/project.json` | sources, board, chart, tabs, dialog with a create form, action button |
 | `ui/pages/task.json` | update form, transitions, menu, inline file preview, comments list, Share button and dialog |
 | `types/task.json` `x-shareable`, `ui/pages/shared-task.json`, `ui/app.json` `linkHome` | share links for people without accounts; `preview` with `display: modal` |
+| `ui/layouts/main.json`, `ui/app.json` `layout` | custom header: brand, nav with active rule, badge from a layout query, group drop-down, user menu, footer |
 | `ui/i18n/en.json`, `ui/i18n/el.json`, `ui/styles.css` | translations, theme |

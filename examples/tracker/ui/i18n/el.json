@@ -1,7 +1,9 @@
 {
   "messages": {
     "@projects.intro": "Έργα που σας ανήκουν ή στα οποία έχετε προσκληθεί. Ανοίξτε ένα για να δείτε τον πίνακά του ή πατήστε «Νέο έργο» για να ξεκινήσετε ένα.",
+    "Account": "Λογαριασμός",
     "Add a comment": "Προσθήκη σχολίου",
+    "All projects": "Όλα τα έργα",
     "Anyone with this link can see the task and its comments, and start it, for 7 days.": "Όποιος έχει αυτόν τον σύνδεσμο μπορεί να δει την εργασία και τα σχόλιά της, και να την ξεκινήσει, για 7 ημέρες.",
     "Attachment": "Συνημμένο",
     "Authentication code": "Κωδικός επαλήθευσης",
@@ -29,6 +31,7 @@
     "List": "Λίστα",
     "Listening…": "Ακούω…",
     "Lower case letters, digits, and dashes": "Πεζά γράμματα, ψηφία και παύλες",
+    "Menu": "Μενού",
     "Microphone access was denied.": "Δεν επιτράπηκε η πρόσβαση στο μικρόφωνο.",
     "More": "Περισσότερα",
     "My tasks": "Οι εργασίες μου",
@@ -43,6 +46,7 @@
     "Nothing assigned to you.": "Δεν σας έχει ανατεθεί τίποτα.",
     "Nothing here yet.": "Δεν υπάρχει τίποτα ακόμη.",
     "Open in new tab": "Άνοιγμα σε νέα καρτέλα",
+    "Open tasks": "Ανοιχτές εργασίες",
     "PDF preview": "Προεπισκόπηση PDF",
     "PDF report": "Αναφορά PDF",
     "Password": "Κωδικός πρόσβασης",
@@ -72,6 +76,7 @@
     "This page does not exist.": "Η σελίδα δεν υπάρχει.",
     "This part of the page failed: {{ message }}": "Αυτό το τμήμα της σελίδας απέτυχε: {{ message }}",
     "Tracker": "Tracker",
+    "Tracker · an Organon example app": "Tracker · ένα παράδειγμα εφαρμογής Organon",
     "Transcribing…": "Μεταγραφή…",
     "Triage": "Ταξινόμηση",
     "Two-factor authentication is required. Add this key to your authenticator app:": "Απαιτείται έλεγχος ταυτότητας δύο παραγόντων. Προσθέστε αυτό το κλειδί στην εφαρμογή επαλήθευσης:",

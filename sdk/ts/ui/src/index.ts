@@ -5,9 +5,10 @@ import "./components/layout";
 import "./components/data";
 import "./components/forms";
 import "./components/charts";
+import "./components/shell";
 
-export { OrganonApp, PageView, RuntimeProvider, resolve, type OrganonAppProps, type RuntimeProviderProps } from "./app";
+export { LayoutView, OrganonApp, PageView, RuntimeProvider, resolve, type OrganonAppProps, type RuntimeProviderProps } from "./app";
 export { evaluate, template, parse, ExprError } from "./expr";
 export { Node, register, type ComponentProps } from "./render";
-export { buildPath, matchRoute, type EditorHooks, type Runtime } from "./runtime";
+export { buildPath, matchRoute, RouteContext, type EditorHooks, type Route, type Runtime } from "./runtime";
 export type * from "./types";

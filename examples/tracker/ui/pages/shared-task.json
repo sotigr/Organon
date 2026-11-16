@@ -4,6 +4,7 @@
   "route": "/shared/:id",
   "params": { "id": { "type": "string", "format": "uuid" } },
   "visible": "principal.kind == 'link'",
+  "layout": "default",
   "data": {
     "task": { "feature": "params.id", "type": "task" },
     "comments": { "children": "params.id", "type": "comment" }

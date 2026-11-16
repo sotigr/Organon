@@ -82,6 +82,13 @@ func (s *scope) with(vars map[string]*rt.Type) *scope {
 	return &scope{vars: m, row: s.row, funcs: s.funcs}
 }
 
+type layoutHead struct {
+	name string
+	file string
+	doc  map[string]any
+	used bool
+}
+
 type pageHead struct {
 	name   string
 	file   string
@@ -92,13 +99,15 @@ type pageHead struct {
 }
 
 type compiler struct {
-	d      Deps
-	probs  []Problem
-	file   string
-	pages  map[string]*pageHead
-	assets map[string][]byte
-	page   *pageCtx
-	ftypes map[*schemaapi.CompiledType]*rt.Type
+	d     Deps
+	probs []Problem
+	file  string
+	pages map[string]*pageHead
+	// layouts are the ui/layouts documents by name (ADR 0029).
+	layouts map[string]*layoutHead
+	assets  map[string][]byte
+	page    *pageCtx
+	ftypes  map[*schemaapi.CompiledType]*rt.Type
 	// Translations (ADR 0018): the languages of ui/app.json, the parsed
 	// ui/i18n files by language, and the pages using each text ("" is
 	// the app shell).
@@ -116,12 +125,12 @@ func (c *compiler) errf(ptr, format string, args ...any) {
 // Compile validates the ui/ files. It returns nil and the problems when
 // there are errors; warnings are returned with a non-nil result.
 func Compile(d Deps, sources []Source) (*Compiled, []Problem) {
-	c := &compiler{d: d, pages: map[string]*pageHead{}, assets: map[string][]byte{},
+	c := &compiler{d: d, pages: map[string]*pageHead{}, layouts: map[string]*layoutHead{}, assets: map[string][]byte{},
 		ftypes: map[*schemaapi.CompiledType]*rt.Type{}, cats: map[string]*Translations{}, catFiles: map[string]string{},
 		used: map[string]map[string]bool{}}
 	out := &Compiled{Assets: c.assets}
 	var appSrc *Source
-	var pageSrcs []Source
+	var pageSrcs, layoutSrcs []Source
 	total := 0
 	for _, s := range sources {
 		c.file = s.File
@@ -139,6 +148,8 @@ func Compile(d Deps, sources []Source) (*Compiled, []Problem) {
 			out.Styles = s.Data
 		case strings.HasPrefix(rel, "ui/pages/") && path.Ext(rel) == ".json" && !strings.Contains(rel[len("ui/pages/"):], "/"):
 			pageSrcs = append(pageSrcs, s)
+		case strings.HasPrefix(rel, "ui/layouts/") && path.Ext(rel) == ".json" && !strings.Contains(rel[len("ui/layouts/"):], "/"):
+			layoutSrcs = append(layoutSrcs, s)
 		case strings.HasPrefix(rel, "ui/i18n/") && path.Ext(rel) == ".json" && !strings.Contains(rel[len("ui/i18n/"):], "/"):
 			lang := strings.TrimSuffix(rel[len("ui/i18n/"):], ".json")
 			if !langRe.MatchString(lang) {
@@ -163,7 +174,7 @@ func Compile(d Deps, sources []Source) (*Compiled, []Problem) {
 			total += len(s.Data)
 			c.assets[name] = s.Data
 		default:
-			c.errf("", "unexpected file: ui/ holds app.json, pages/*.json, i18n/<language>.json, styles.css, and assets/**")
+			c.errf("", "unexpected file: ui/ holds app.json, pages/*.json, layouts/*.json, i18n/<language>.json, styles.css, and assets/**")
 		}
 	}
 	if total > MaxAssetsBytes {
@@ -175,6 +186,9 @@ func Compile(d Deps, sources []Source) (*Compiled, []Problem) {
 		if h := c.head(s, routes); h != nil {
 			c.pages[h.name] = h
 		}
+	}
+	for _, s := range layoutSrcs {
+		c.layoutHead(s)
 	}
 	if appSrc == nil && len(pageSrcs) > 0 {
 		c.file = "ui/app.json"
@@ -190,8 +204,18 @@ func Compile(d Deps, sources []Source) (*Compiled, []Problem) {
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		if p := c.compilePage(c.pages[n]); p != nil {
+		if p := c.compilePage(c.pages[n], out.App); p != nil {
 			out.Pages = append(out.Pages, p)
+		}
+	}
+	lnames := make([]string, 0, len(c.layouts))
+	for n := range c.layouts {
+		lnames = append(lnames, n)
+	}
+	sort.Strings(lnames)
+	for _, n := range lnames {
+		if l := c.compileLayout(c.layouts[n]); l != nil {
+			out.Layouts = append(out.Layouts, l)
 		}
 	}
 	for t, pages := range c.used {
@@ -388,8 +412,11 @@ func (c *compiler) app(data []byte) *App {
 		c.errf("", "invalid JSON: %v", err)
 		return nil
 	}
-	c.known("", m, "$schema", "title", "logo", "home", "linkHome", "requireLogin", "nav", "notFound", "languages", "speech", "x-layout")
-	a := &App{RequireLogin: true, Doc: browserDoc(m)}
+	c.known("", m, "$schema", "title", "logo", "home", "linkHome", "requireLogin", "nav", "layout", "notFound", "languages", "speech", "x-layout")
+	a := &App{RequireLogin: true, Doc: browserDoc(m), Layout: LayoutDefault}
+	if v, ok := m["layout"]; ok {
+		a.Layout = c.layoutRef("/layout", v)
+	}
 	if v, ok := m["languages"]; ok {
 		c.languages(v)
 	}
@@ -472,15 +499,24 @@ func (c *compiler) require(ptr string, m map[string]any, names ...string) {
 	}
 }
 
-func (c *compiler) compilePage(h *pageHead) *Page {
+func (c *compiler) compilePage(h *pageHead, app *App) *Page {
 	c.file = h.file
 	c.pageName = h.name
 	defer func() { c.pageName = "" }()
 	m := h.doc
-	c.known("", m, "$schema", "page", "title", "route", "params", "visible", "state", "data", "body", "x-layout")
+	c.known("", m, "$schema", "page", "title", "route", "params", "visible", "layout", "state", "data", "body", "x-layout")
 	c.page = &pageCtx{sources: map[string]*srcInfo{}, state: map[string]*rt.Type{}, dialogs: map[string]bool{},
 		dialogRefs: map[string]string{}, types: map[string]bool{}}
-	p := &Page{Name: h.name, File: h.file, Route: h.route, Params: h.params, Doc: browserDoc(m)}
+	p := &Page{Name: h.name, File: h.file, Route: h.route, Params: h.params, Doc: browserDoc(m), Layout: LayoutDefault}
+	if app != nil {
+		p.Layout = app.Layout
+	}
+	if v, ok := m["layout"]; ok {
+		p.Layout = c.layoutRef("/layout", v)
+	}
+	if lh := c.layouts[p.Layout]; lh != nil {
+		lh.used = true
+	}
 	if v, ok := m["visible"]; ok {
 		p.Visible = c.expr("/visible", v, principalScope(), "bool")
 	}
@@ -1331,6 +1367,48 @@ func (c *compiler) special(ptr string, m map[string]any, sc *scope, nc *nodeCtx)
 		}
 	case "form":
 		c.form(ptr, m, sc, nc)
+	case "nav", "userMenu":
+		c.navItems(ptr+"/items", m["items"])
+	}
+}
+
+// navItems checks the links of a nav or user menu (ADR 0029): each goes to
+// exactly one of a page and a URL, or, in a nav, is a group of links (the
+// catalog allows items one level deep, in nav only).
+func (c *compiler) navItems(ptr string, v any) {
+	items, _ := v.([]any)
+	for i, it := range items {
+		ip := ptr + "/" + strconv.Itoa(i)
+		im, _ := it.(map[string]any)
+		if im == nil {
+			continue
+		}
+		_, page := im["page"]
+		_, url := im["url"]
+		sub, group := im["items"]
+		switch {
+		case group && (page || url):
+			c.errf(ip, "a group has items, not page or url")
+		case !group && page == url:
+			c.errf(ip, "a link needs exactly one of page and url")
+		}
+		if icon, ok := im["icon"].(string); ok {
+			c.assetRef(ip+"/icon", icon)
+		}
+		if group {
+			c.navItems(ip+"/items", sub)
+		}
+	}
+}
+
+// assetRef checks a literal assets/<path> reference; interpolated values
+// are checked by the browser.
+func (c *compiler) assetRef(ptr, s string) {
+	if strings.Contains(s, "{{") {
+		return
+	}
+	if _, found := c.assets[strings.TrimPrefix(s, "assets/")]; !strings.HasPrefix(s, "assets/") || !found {
+		c.errf(ptr, "must name a file in ui/assets as assets/<path>")
 	}
 }
 
