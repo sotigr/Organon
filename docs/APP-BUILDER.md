@@ -172,6 +172,7 @@ myapp/
 | `auth.password` | Password sign-in. Admins create users; there is no self-signup (give customers share links, §6). |
 | `auth.oidc[]` | OIDC providers. `google` and `gitlab` have built-in issuers; others need `issuer`. With `signup: true`, users are created on first login (optionally only for `allowedDomains`). |
 | `auth.mfa` | TOTP for `requiredForRoles`, or `requiredForAll: true`. |
+| `auth.people` (since 1.2) | Lets non-admins manage users: role → the roles its holders may assign, e.g. `{"manager": ["mechanic", "frontdesk", "manager"]}`. Never `admin`. See People management (§6). |
 | `limits` | May only lower the server's defaults. |
 | `llm.aliases` | Alias → `"<provider>:<model>"`. Built-in aliases are `default`, `large`, and `fast`. Flows use aliases only. |
 | `settings` | Free-form values; flows read them as `env.<key>`. |
@@ -362,6 +363,28 @@ A nullable field is `"type": ["string", "null"]`, or has `null` in its
   - users update themselves;
   - owners manage their teams and service accounts;
   - grants are managed by holders of `admin` on the granted feature.
+- **People management** (since 1.2): with `auth.people` in app.json, its
+  roles manage users through built-in actions on the `user` type. You
+  write no policy for them (policies and flows may not use these names):
+
+  | Action (`POST /v1/actions/user/<id>/<name>`) | Input | Runs on |
+  | --- | --- | --- |
+  | `addUser` | `displayName`, `email`, `password`, `role` | the caller's own user (`principal.id`); output `{id}` |
+  | `setRole` | `role` | the user |
+  | `suspend`, `reactivate` | — | the user (suspending signs them out) |
+  | `setPassword` | `password` | the user (signs them out) |
+  | `resetMfa`, `signOutEverywhere` | — | the user |
+
+  - A manager acts on a user when the user is someone else, not deleted,
+    and every role the user holds is one the manager may assign. So they
+    never touch admins or themselves (except `signOutEverywhere`).
+  - Managers see the `email`, `roles`, and `status` of those users in
+    reads and lists. `roles` and `status` still cannot be changed with a
+    plain update; use the actions.
+  - Admins may run every action on anyone, also without `auth.people`.
+  - `can(feature, 'action:suspend')` answers from the same rule, so
+    buttons hide themselves.
+  - Put the manager roles in `auth.mfa.requiredForRoles`.
 
 ---
 
@@ -935,7 +958,7 @@ overrides it (`"default"` = built-in header, `"none"` = no frame).
 | Layout | `stack`, `row`, `columns`, `card`, `tabs` (with `state` for an integer state var), `dialog` (`name`, opened by an `open` step), `divider` |
 | Text | `heading`, `text` (`tone`), `markdown` (no raw HTML), `badge`, `image` (`assets/<path>` or a URL), `link` (`page`+`params`, or `url`; `download` saves a file) |
 | Data | `table` (columns by `field` or `value`, `display`, per-column `page`; `rowPage`/`rowParams`), `list` (`item` template), `field`, `detail`, `stat` (`format: number\|percent\|date`), `empty`, `preview` (images, PDF, video, audio from a blob field; `display: inline` (default) or `modal` for a thumbnail/link that opens a viewer), `transitions` (state-machine buttons the user may run now) |
-| Forms | `form` (`mode: create\|update\|action`; generated from the user's create or update view, or the action flow's `input`; `fields: [{path, label, widget, help, labelField, speech}]`; `on.submit` steps see `result` and `form.values`), `button` (`variant`, `on.click`), `menu` (`items: [{label, visible, steps}]`) |
+| Forms | `form` (`mode: create\|update\|action`; generated from the user's create or update view, or the action flow's `input`; `fields: [{path, label, widget, help, labelField, speech, options}]`; `widget: password` (since 1.2) for secrets, chosen by itself for password inputs; `options: [{value, label}]` (since 1.2) sets the choices of a select, in order, with translatable labels; `on.submit` steps see `result` and `form.values`), `button` (`variant`, `on.click`), `menu` (`items: [{label, visible, steps}]`) |
 | Charts | `board` (kanban by a state-machine field; dragging runs the transition), `chart` (`kind: bar\|line\|pie`; `source` + `groupBy` [+ `value`, `op: count\|sum\|avg`] or explicit `series`) |
 | Shell (since 1.2) | `brand` (`text`), `nav` (`items`, `orientation`), `userMenu` (`label`, `items`, `signOut`), `languageSwitch`, `spacer`; see Layouts |
 
@@ -986,6 +1009,30 @@ Inside `table`, `list`, and `board` rows, `item` and `index` are in scope.
 
 **The UI hides; policies protect.** Hide controls with `can(...)`, but
 rely on policies for security.
+
+**Staff pages** (since 1.2, with `auth.people`, §6). A list of users and
+a dialog that adds one:
+
+```json
+{ "page": "staff", "route": "/staff", "visible": "'manager' in principal.roles || 'admin' in principal.roles",
+  "data": { "me": { "feature": "principal.id", "type": "user" },
+            "people": { "query": { "type": "user", "sort": [ { "field": "/displayName" } ], "limit": 200 } } },
+  "body": { "component": "stack", "children": [
+    { "component": "button", "label": "New user", "visible": "can(data.me, 'action:addUser')",
+      "on": { "click": [ { "do": "open", "dialog": "add" } ] } },
+    { "component": "table", "source": "people", "rowPage": "person", "rowParams": { "id": "item.id" },
+      "columns": [ { "field": "/displayName" }, { "field": "/email" }, { "field": "/status" } ] },
+    { "component": "dialog", "name": "add", "title": "New user", "children": [
+      { "component": "form", "mode": "action", "type": "user", "id": "principal.id", "action": "addUser",
+        "fields": [ { "path": "/displayName" }, { "path": "/email" }, { "path": "/password", "label": "First password" },
+                    { "path": "/role", "options": [ { "value": "mechanic", "label": "Mechanic" } ] } ],
+        "on": { "submit": [ { "do": "close" }, { "do": "navigate", "page": "person", "params": { "id": "result.output.id" } } ] } } ] } ] } }
+```
+
+On the person page, buttons run `{"do": "action", "type": "user", "id":
+"params.id", "action": "suspend"}` (and `reactivate`, `resetMfa`,
+`signOutEverywhere`, `setRole` with `"input": {"role": "'frontdesk'"}`),
+each with `"visible": "can(data.person, 'action:suspend')"`.
 
 **Styling.**
 - In `ui/styles.css`, override the variables `--o-accent`, `--o-bg`,
@@ -1255,6 +1302,8 @@ runs; `organon export`/`import` for a logical NDJSON copy of the data.
 | `x-sequence fields ... do not list them in required` | Remove the field from `required`; it is filled in on commit. |
 | Expected a sequence number in a test that depends on the year | Manifest tests use the real clock; keep `{year}` out of formats you assert on, or match only the `{n}` part. |
 | Webhook answers `401` | Check `trigger.verify` matches the provider and the secret value. |
+| `... is a built-in user action decided by app.json auth.people` | Remove `addUser`, `setRole`, `suspend`, ... from your `user` policy or flow; configure `auth.people` instead. |
+| A manager gets `403` on a people action | The target holds a role outside the manager's `auth.people` list (or is the manager themselves), or the new role is not in the list. |
 
 ---
 

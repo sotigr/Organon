@@ -13,6 +13,7 @@ import (
 	llmdomain "organon/internal/runtime/domain/llm"
 	schemaapi "organon/internal/schema/api"
 
+	accessapi "organon/internal/access/api"
 	accessdomain "organon/internal/access/domain"
 	flowapp "organon/internal/flow/application"
 	flowdomain "organon/internal/flow/domain"
@@ -66,7 +67,9 @@ type Compiled struct {
 	Types     *schemadomain.Registry
 	Policies  *accessdomain.PolicySet
 	Roles     *accessdomain.Roles
-	Flows     *flowdomain.FlowSet
+	// People is app.json auth.people (ADR 0030); nil when unset.
+	People *accessdomain.People
+	Flows  *flowdomain.FlowSet
 	Nodes     *flowdomain.NodeRegistry
 	LLM       llmdomain.Config
 	// Migrations are the compiled data migrations (spec 12.5).
@@ -135,7 +138,13 @@ func Compile(m *manifestdomain.Manifest) (*Compiled, error) {
 			probs = append(probs, pr)
 		}
 	}
-	probs = append(probs, checkAuth(m.App.Auth, m.App.Roles)...)
+	for _, p := range checkAuth(m.App.Auth, m.App.Roles) {
+		if p.Warning {
+			warnings = append(warnings, p)
+		} else {
+			probs = append(probs, p)
+		}
+	}
 	probs = append(probs, checkPython(m.App.Python, m.Nodes)...)
 	llmCfg, err := llmdomain.ParseConfig(m.App.LLM)
 	if err != nil {
@@ -156,6 +165,8 @@ func Compile(m *manifestdomain.Manifest) (*Compiled, error) {
 		probs = append(probs, Problem{File: p.File, Pointer: p.Pointer, Message: p.Message})
 	}
 	probs = append(probs, shareProblems(m, reg, flows)...)
+	probs = append(probs, peopleProblems(reg, policies, flows)...)
+	people := accessdomain.NewPeople(m.App.Auth.People, roles)
 	docs, dp := compileDocuments(m)
 	probs = append(probs, dp...)
 	probs = append(probs, documentRefs(flows, docs)...)
@@ -183,7 +194,7 @@ func Compile(m *manifestdomain.Manifest) (*Compiled, error) {
 	for i, f := range m.UI {
 		usrc[i] = uidomain.Source{File: f.Path, Data: f.Data}
 	}
-	ui, up := uidomain.Compile(uiDeps(reg, flows), usrc)
+	ui, up := uidomain.Compile(uiDeps(reg, flows, peopleInputs(m, people)), usrc)
 	for _, p := range up {
 		pr := Problem{File: p.File, Pointer: p.Pointer, Message: p.Message, Warning: p.Warning}
 		if p.Warning {
@@ -195,12 +206,39 @@ func Compile(m *manifestdomain.Manifest) (*Compiled, error) {
 	if len(probs) > 0 {
 		return nil, &ValidationError{Problems: append(probs, warnings...)}
 	}
-	return &Compiled{Documents: docs, UI: ui, Migrations: migrations, Manifest: m, Types: reg, Policies: policies, Roles: roles, Flows: flows, Nodes: nodes, LLM: llmCfg, Warnings: warnings}, nil
+	return &Compiled{Documents: docs, UI: ui, Migrations: migrations, Manifest: m, Types: reg, Policies: policies, Roles: roles, People: people, Flows: flows, Nodes: nodes, LLM: llmCfg, Warnings: warnings}, nil
 }
 
 // shareProblems checks that the actions named by x-shareable (ADR 0020)
 // and x-sequence "on" (ADR 0021) exist: a state-machine transition or a
 // flow action.
+// peopleProblems rejects app policies and flows that define the built-in
+// people actions of the user type (ADR 0030).
+func peopleProblems(reg schemaapi.TypeRegistry, policies *accessdomain.PolicySet, flows *flowdomain.FlowSet) []Problem {
+	ct, ok := reg.ByName("user")
+	if !ok {
+		return nil
+	}
+	var out []Problem
+	for _, a := range accessdomain.PeopleActions {
+		if policies != nil {
+			for _, pol := range policies.For(ct) {
+				if _, ok := pol.Progs[accessapi.ActionOp(a)]; ok && !pol.Builtin {
+					out = append(out, Problem{File: "policies", Pointer: "/actions/" + a,
+						Message: fmt.Sprintf("%s is a built-in user action decided by app.json auth.people; remove it from the %s policy", a, pol.Target)})
+				}
+			}
+		}
+		if flows != nil {
+			if f, ok := flows.Action(ct, a); ok {
+				out = append(out, Problem{File: f.File, Pointer: "/trigger/action",
+					Message: fmt.Sprintf("%s is a built-in user action (auth.people); use another name", a)})
+			}
+		}
+	}
+	return out
+}
+
 func shareProblems(m *manifestdomain.Manifest, reg schemaapi.TypeRegistry, flows *flowdomain.FlowSet) []Problem {
 	files := map[schemaapi.TypeID]string{}
 	for _, f := range m.Types {

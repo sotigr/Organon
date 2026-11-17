@@ -48,6 +48,9 @@ type AuthConfig struct {
 	// Roles are app.json roles and the roles each includes, shown by the
 	// admin console (ADR 0027).
 	Roles map[string][]string
+	// People is app.json auth.people (ADR 0030): which non-admins manage
+	// users; nil leaves user management to admins.
+	People *domain.People
 }
 
 // ErrAdminsDisabled is returned for admin principals when admin accounts
@@ -262,10 +265,11 @@ type NewUser struct {
 	NoPassword bool
 }
 
-// CreateUser creates a user feature and its password credential. Only
-// admins may create users (no self-signup; decided 2026-10-31).
+// CreateUser creates a user feature and its password credential. Admins
+// create users (no self-signup; decided 2026-10-31), and so do people
+// managers, with a password and roles they may assign (ADR 0030).
 func (s *AuthService) CreateUser(ctx context.Context, actor accessapi.Principal, u NewUser) (kernel.ID, error) {
-	if !actor.IsSystem() && !actor.HasRole("admin") {
+	if !isAdmin(actor) && (u.NoPassword || !s.cfg.People.MayAssign(actor.Roles, u.Roles)) {
 		return kernel.NilID, kernel.ErrForbidden
 	}
 	if s.cfg.NoAdmins && slices.Contains(u.Roles, "admin") {
@@ -311,7 +315,7 @@ func (s *AuthService) CreateUser(ctx context.Context, actor accessapi.Principal,
 			return kernel.NilID, err
 		}
 	}
-	s.audit(ctx, actor.ID, "user_created", "user "+id.String())
+	s.auditUser(ctx, actor, "user_created", id, "user "+id.String()+" roles "+strings.Join(u.Roles, ","))
 	return id, nil
 }
 

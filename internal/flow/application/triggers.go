@@ -356,6 +356,13 @@ func (e *Engine) InvokeAction(ctx context.Context, p accessapi.Principal, typeNa
 		}
 		return ActionResult{Output: res.Output}, nil
 	}
+	if ct.Base() == schemaapi.TypeUser && e.d.People != nil && e.d.IsPeople != nil && e.d.IsPeople(action) {
+		out, err := e.d.People(ctx, p, id, action, input)
+		if err != nil {
+			return ActionResult{}, err
+		}
+		return ActionResult{Output: out}, nil
+	}
 	if action == "share" && ct.Shareable != nil && e.d.Share != nil {
 		out, err := e.d.Share(ctx, p, id, ct.Shareable, input)
 		if err != nil {

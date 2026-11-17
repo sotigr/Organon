@@ -167,13 +167,13 @@ func (s *AuthService) RevokeAPIKey(ctx context.Context, actor accessapi.Principa
 
 // SetPassword gives a user a new password (creating the credential for a
 // user who had none, e.g. one invited through OIDC) and signs them out
-// everywhere. Admins only.
+// everywhere. Admins, and people managers for users they manage.
 func (s *AuthService) SetPassword(ctx context.Context, actor accessapi.Principal, id kernel.ID, password string) error {
-	if !isAdmin(actor) {
-		return kernel.ErrForbidden
-	}
 	data, base, err := s.principalOf(ctx, id)
 	if err != nil {
+		return err
+	}
+	if err := s.mayManage(actor, id, data, domain.ActSetPassword, nil); err != nil {
 		return err
 	}
 	if base != schemaapi.TypeUser {
@@ -205,38 +205,43 @@ func (s *AuthService) SetPassword(ctx context.Context, actor accessapi.Principal
 	if err := s.store.DeleteSessionsOf(ctx, id); err != nil {
 		return err
 	}
-	s.audit(ctx, actor.ID, "password_set", "for "+id.String())
+	s.auditUser(ctx, actor, "password_set", id, "")
 	return nil
 }
 
 // ResetMFA removes a user's authenticator; when MFA is required they
-// enroll again at their next sign-in. Admins only.
+// enroll again at their next sign-in. Admins, and people managers for
+// users they manage.
 func (s *AuthService) ResetMFA(ctx context.Context, actor accessapi.Principal, id kernel.ID) error {
-	if !isAdmin(actor) {
-		return kernel.ErrForbidden
+	data, _, err := s.principalOf(ctx, id)
+	if err != nil {
+		return err
 	}
-	if _, _, err := s.principalOf(ctx, id); err != nil {
+	if err := s.mayManage(actor, id, data, domain.ActResetMFA, nil); err != nil {
 		return err
 	}
 	if err := s.store.DeleteTOTP(ctx, id); err != nil && !errors.Is(err, kernel.ErrNotFound) {
 		return err
 	}
-	s.audit(ctx, actor.ID, "mfa_reset", "for "+id.String())
+	s.auditUser(ctx, actor, "mfa_reset", id, "")
 	return nil
 }
 
 // SignOutEverywhere ends every session of a principal; admins and the
-// principal itself.
+// principal itself, and people managers for users they manage.
 func (s *AuthService) SignOutEverywhere(ctx context.Context, actor accessapi.Principal, id kernel.ID) error {
-	if !isAdmin(actor) && actor.ID != id {
-		return kernel.ErrForbidden
-	}
-	if _, _, err := s.principalOf(ctx, id); err != nil {
+	data, _, err := s.principalOf(ctx, id)
+	if err != nil {
 		return err
+	}
+	if actor.ID != id {
+		if err := s.mayManage(actor, id, data, domain.ActSignOutEverywhere, nil); err != nil {
+			return err
+		}
 	}
 	if err := s.store.DeleteSessionsOf(ctx, id); err != nil {
 		return err
 	}
-	s.audit(ctx, actor.ID, "sessions_revoked", "for "+id.String())
+	s.auditUser(ctx, actor, "sessions_revoked", id, "")
 	return nil
 }

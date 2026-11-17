@@ -40,6 +40,11 @@ secret is ever returned):
 Suspending a principal (`status: suspended`) ends its access at the next
 request, sessions and keys included.
 
+With `auth.people` (since 1.2), the roles it lists may also call the
+routes above for the users they manage, and everyone uses the built-in
+user actions `POST /v1/actions/user/<id>/{addUser,setRole,suspend,reactivate,setPassword,resetMfa,signOutEverywhere}`
+([policies](04-policies.md#people-management)).
+
 ## Features
 
 | Request | Does |

@@ -410,6 +410,14 @@ Plan: ~/.claude/plans/read-the-docs-then-reflective-valiant.md (milestones M1–
   offered pages. Renderer: components/shell.tsx, LayoutView/Frame in app.tsx (layout stays mounted across its pages),
   RouteContext, Runtime.setLanguage; base.css `o-layout-*`, `o-nav*` (collapse below 720 px). Admin: layouts list,
   JSON editor (UiLayout) with live validation, layout pickers; dev endpoints PUT/DELETE /v1/dev/manifest/ui/layouts/{name}.
+- Delegated user management (2026-11-17, ADR 0030): app.json `auth.people` (checkPeople in internal/app/auth.go;
+  reserved action names in peopleProblems, compile.go). Rule in internal/access/domain/people.go (AssignableBy,
+  Manages, MayAssign, Allows, PeopleInputs). Authorizer: SetPeople, owner audience for managed users, reserved user
+  actions decided by the rule. AuthService (access/application/people.go): PeopleAction, SetRoles, SetStatus,
+  mayManage, auditUser; CreateUser/SetPassword/ResetMFA/SignOutEverywhere follow the rule. Flow engine dispatches
+  people actions next to share (Deps.People/IsPeople). UI: people inputs as user actions (uiDeps, FlowActions);
+  form `password` widget (also format password / writeOnly) and field `options [{value,label}]`. Tests:
+  access/domain/people_test.go, test/e2e/people_test.go, internal/app TestPeopleActionForms. Version 1.2.0.
   Tracker: ui/layouts/main.json (app default), sharedTask stays on `default`. Tests: domain rules + TestLayouts,
   e2e bundle/link bundle, uieditor save/delete.
   **Not yet done on this machine (no Node/pnpm here):** `make sdk` (typecheck + texts test), `make ui`, `make web`

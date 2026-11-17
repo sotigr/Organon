@@ -133,3 +133,8 @@
 | Topic | Decision |
 |---|---|
 | Custom navigation (ADR 0029) | Named layouts in `ui/layouts/` chosen per app (`ui/app.json` `layout`) and per page; layouts may have their own data sources (badges); header, sidebar, and footer regions in the first version; declarative only (catalog components + CSS, no custom HTML/JS) |
+
+## 2026-11-17
+| Topic | Decision |
+|---|---|
+| Delegated user management (ADR 0030) | `app.json` `auth.people` (role -> assignable roles, never admin); built-in user actions `addUser` (on the caller's own record), `setRole`, `suspend`, `reactivate`, `setPassword`, `resetMfa`, `signOutEverywhere`, decided by the rule and not by policies; managers get the owner audience on users they manage; generic writes of `roles`/`status` stay admin-only; managers may manage other managers when listed; `password` widget and select `options` in UI forms; released with layouts as 1.2.0 |

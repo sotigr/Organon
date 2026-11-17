@@ -193,6 +193,7 @@ func Build(ctx context.Context, cfg config.Config, c *Compiled, opt Options) (rt
 	index := relindex.New(sys)
 	rt.Authorizer = accessapp.NewAuthorizer(c.Policies, c.Roles, index, exprCompiler(), opt.Clock)
 	rt.Authorizer.SetParentLoader(rt.Content.RefByID)
+	rt.Authorizer.SetPeople(c.People)
 	authz.Authorizer = rt.Authorizer
 	hasher := accesscrypto.DefaultArgon2id
 	if opt.FastHashing {
@@ -241,6 +242,7 @@ func Build(ctx context.Context, cfg config.Config, c *Compiled, opt Options) (rt
 	authCfg.NoAdmins = cfg.Admin.DisableAccounts
 	authCfg.PublicURL = cfg.HTTP.PublicURL
 	authCfg.Roles = c.Manifest.App.Roles
+	authCfg.People = c.People
 	rt.Auth = accessapp.NewAuthService(store, hasher, accessmem.NewLimiter(10, 15*time.Minute, opt.Clock), sys, sys, index, opt.Clock, authCfg)
 	settings := c.Manifest.App.Settings
 	if rt.LLM, err = llmRouter(cfg, c, secrets, opt); err != nil {
@@ -258,7 +260,7 @@ func Build(ctx context.Context, cfg config.Config, c *Compiled, opt Options) (rt
 		SecretHosts: c.Manifest.App.SecretHosts(), Document: renderDocument(c, opt.Clock, func() *integrationapp.Blobs { return blobSvc }), Share: func(ctx context.Context, p accessapi.Principal, id kernel.ID,
 			def *schemaapi.ShareDef, input map[string]any) (any, error) {
 			return rt.Auth.Share(ctx, p, id, def, input)
-		}, LLM: rt.LLM, Ephemeral: rt.ephemeral, Code: code, Bundle: newBundles(c).get,
+		}, People: rt.Auth.PeopleAction, IsPeople: accessdomain.IsPeopleAction, LLM: rt.LLM, Ephemeral: rt.ephemeral, Code: code, Bundle: newBundles(c).get,
 	})
 	rt.Content.SetBeforeWrite(&beforeWriteAdapter{engine: rt.Engine})
 	rt.Content.SetMigrations(c.Migrations, rt.Engine.RunForFeature)
@@ -356,6 +358,11 @@ func Build(ctx context.Context, cfg config.Config, c *Compiled, opt Options) (rt
 	rt.UI = uiapp.New(uiapp.Deps{UI: c.UI, Types: c.Types, Clock: opt.Clock, Version: c.Manifest.Hash[:12], Speech: transcriber,
 		FlowActions: func(ct *schemaapi.CompiledType) map[string]json.RawMessage {
 			out := map[string]json.RawMessage{}
+			if ct.Base() == schemaapi.TypeUser {
+				for name, in := range peopleInputs(c.Manifest, c.People) {
+					out[name] = in
+				}
+			}
 			for _, f := range c.Flows.ByTrigger(flowdomain.TriggerAction) {
 				if f.Matches(ct) {
 					out[f.Def.Trigger.Action] = f.Def.Input

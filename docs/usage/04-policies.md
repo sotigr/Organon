@@ -112,6 +112,25 @@ their subject and managed by holders of `admin` on the granted feature.
 Run records (`flowRun`), blob intents, migrations, and the audit log are
 admin-only.
 
+## People management
+
+Since 1.2, `app.json` `auth.people` lets roles other than `admin` manage
+users, through built-in actions on the `user` type: `addUser` (run on your
+own user; input `displayName`, `email`, `password`, `role`; output `{id}`),
+`setRole {role}`, `suspend`, `reactivate`, `setPassword {password}`,
+`resetMfa`, and `signOutEverywhere`. No policy decides them, and policies
+and flows may not use these names. A manager acts on a user when the user
+is someone else, not deleted, and holds only roles the manager may assign;
+the new role must be one of them too. Managers also see the email, roles,
+and status of those users. Roles and status change only through the
+actions (a plain update is refused). Admins run the actions on anyone.
+Every action is audited with the user as the target.
+
+```json
+"auth": { "people": { "manager": ["mechanic", "frontdesk", "manager"] },
+          "mfa": { "requiredForRoles": ["manager", "admin"] } }
+```
+
 ## Testing policies
 
 Write a permission matrix as a manifest test ([guide 8](08-testing-and-deploy.md#manifest-tests)):

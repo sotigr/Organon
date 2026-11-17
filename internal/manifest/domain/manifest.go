@@ -78,6 +78,9 @@ type AuthConfig struct {
 	} `json:"password"`
 	OIDC []OIDCProvider `json:"oidc,omitempty"`
 	MFA  MFAConfig      `json:"mfa"`
+	// People names the roles whose holders manage users and the roles
+	// each may assign (ADR 0030).
+	People map[string][]string `json:"people,omitempty"`
 }
 
 // OIDCProvider is one entry of auth.oidc (spec 8.3, 12.2).

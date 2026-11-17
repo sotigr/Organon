@@ -31,6 +31,19 @@ type Authorizer struct {
 	principals map[string]rt.Program // compiled principal-only scope conditions
 
 	parents RefLoader // loads a feature's parent for rules that read parent
+
+	people *domain.People // delegated user management (ADR 0030); nil: admins only
+}
+
+// SetPeople enables delegated user management (app.json auth.people).
+func (a *Authorizer) SetPeople(p *domain.People) { a.people = p }
+
+// peopleTarget reports whether f is a user managed by the people rules.
+func (a *Authorizer) peopleTarget(f *accessapi.FeatureRef) (domain.PersonTarget, bool) {
+	if a.people == nil || f == nil || f.Type == nil || f.Type.Base() != schemaapi.TypeUser {
+		return domain.PersonTarget{}, false
+	}
+	return domain.TargetOf(f.ID.String(), f.Data), true
 }
 
 // RefLoader reads a feature for the Authorizer without authorization.
@@ -190,6 +203,14 @@ func (a *Authorizer) Check(ctx context.Context, p accessapi.Principal, req acces
 	if ct == nil {
 		return accessapi.Decision{}, fmt.Errorf("authorization request without a type")
 	}
+	if name := req.Op.Action(); name != "" && domain.IsPeopleAction(name) && ct.Base() == schemaapi.TypeUser && a.people != nil {
+		// People actions follow auth.people, never app policies (ADR 0030).
+		t, _ := a.peopleTarget(req.Feature)
+		if t.ID != "" && a.people.Allows(p.ID.String(), p.Roles, name, t, req.Input) {
+			return accessapi.Decision{Allowed: true, Reason: "auth.people"}, nil
+		}
+		return accessapi.Decision{Reason: "auth.people does not allow " + name}, nil
+	}
 	if req.Op == accessapi.OpMove && !a.defines(ct, accessapi.OpMove) {
 		// Without a move policy, a move needs update on the feature and
 		// create under the new parent.
@@ -337,6 +358,11 @@ func (a *Authorizer) Audience(ctx context.Context, p accessapi.Principal, f *acc
 			return schemaapi.AudAdmin, nil
 		}
 		if isOwner(p, f.Data) {
+			return schemaapi.AudOwner, nil
+		}
+		// People managers see the email, roles, and status of the users
+		// they manage; writes still go through the people actions.
+		if t, ok := a.peopleTarget(f); ok && a.people.Manages(p.ID.String(), p.Roles, t) {
 			return schemaapi.AudOwner, nil
 		}
 	}

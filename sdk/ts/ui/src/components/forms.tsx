@@ -16,6 +16,8 @@ interface FieldSpec {
   labelField?: string;
   /** speech: false keeps dictation out of this field (ADR 0028). */
   speech?: boolean;
+  /** options: select choices in order with translatable labels (since 1.2). */
+  options?: { value: string; label: string }[];
 }
 
 interface Field {
@@ -28,10 +30,13 @@ interface Field {
   meta?: FieldMeta;
   labelField?: string;
   speech: boolean;
+  /** labels of select options, by value */
+  labels?: Record<string, string>;
 }
 
-function widgetFor(meta: FieldMeta | undefined, schema: { type?: string | string[]; enum?: unknown[]; format?: string; maxLength?: number } | undefined): string {
+function widgetFor(meta: FieldMeta | undefined, schema: { type?: string | string[]; enum?: unknown[]; format?: string; maxLength?: number; writeOnly?: boolean } | undefined): string {
   const kind = meta?.kind;
+  if (schema?.format === "password" || schema?.writeOnly) return "password";
   if (kind === "ref") return "ref";
   if (kind === "blob") return "file";
   if (kind === "decimal") return "decimal";
@@ -142,11 +147,18 @@ register("form", ({ node }: ComponentProps) => {
       const schema = props[name];
       const fm = mode === "action" ? undefined : meta?.fields[s.path];
       const widget = s.widget && s.widget !== "auto" ? s.widget : widgetFor(fm, schema);
-      const en = (fm?.enum || (schema?.enum as string[] | undefined))?.filter((x) => x != null);
+      let en = (fm?.enum || (schema?.enum as string[] | undefined))?.filter((x) => x != null);
+      let labels: Record<string, string> | undefined;
+      if (s.options?.length) {
+        // The listed options, in order; values outside the schema's enum are dropped.
+        labels = {};
+        for (const o of s.options) labels[o.value] = ev.text(o.label);
+        en = s.options.map((o) => o.value).filter((v) => !en || en.includes(v));
+      }
       return {
-        name, widget, enum: en, meta: fm, labelField: s.labelField,
+        name, widget, enum: en, meta: fm, labelField: s.labelField, labels,
         // Dictation suits prose: not codes, emails, URLs, or IDs.
-        speech: s.speech !== false && !["email", "uri", "uuid", "date", "date-time"].includes(String(fm?.format ?? schema?.format ?? "")),
+        speech: s.speech !== false && widget !== "password" && !["email", "uri", "uuid", "date", "date-time"].includes(String(fm?.format ?? schema?.format ?? "")),
         label: s.label !== undefined ? ev.text(s.label) : schema?.title || labelOf(s.path, fm),
         help: s.help !== undefined ? ev.text(s.help) : undefined,
         required: (view.required || []).includes(name),
@@ -236,7 +248,7 @@ function Input({ field, value, set, type, id, parent }: { field: Field; value: u
       return (
         <select className="o-input" value={value == null ? "" : String(value)} onChange={(e) => set(e.target.value === "" ? null : e.target.value)}>
           <option value="">—</option>
-          {(field.enum || []).map((o) => <option key={o} value={o}>{enumLabel(field.meta, o)}</option>)}
+          {(field.enum || []).map((o) => <option key={o} value={o}>{field.labels?.[o] ?? enumLabel(field.meta, o)}</option>)}
         </select>
       );
     case "textarea":
@@ -267,6 +279,8 @@ function Input({ field, value, set, type, id, parent }: { field: Field; value: u
       return <input className="o-input" type="datetime-local" value={toInput(value, "datetime")} onChange={(e) => set(fromInput(e.target.value, "datetime"))} />;
     case "number":
       return <input className="o-input" type="number" value={toInput(value, "number")} onChange={(e) => set(fromInput(e.target.value, "number", field.meta))} />;
+    case "password":
+      return <input className="o-input" type="password" autoComplete="new-password" value={toInput(value, "text")} onChange={(e) => set(e.target.value === "" ? null : e.target.value)} />;
     case "decimal":
       return <input className="o-input" inputMode="decimal" value={toInput(value, "text")} onChange={(e) => set(e.target.value === "" ? null : e.target.value)} />;
   }

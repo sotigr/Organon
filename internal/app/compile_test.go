@@ -95,3 +95,34 @@ func TestShareableActionsExist(t *testing.T) {
 		t.Fatalf("want an error for the unknown action, got %v", err)
 	}
 }
+
+// ADR 0030: UI forms use the built-in people actions of the user type;
+// their fields come from the action input, and select options take
+// translatable labels.
+func TestPeopleActionForms(t *testing.T) {
+	page := func(fields string) []byte {
+		return []byte(`{"page": "staff", "route": "/staff", "body": {"component": "form", "mode": "action", "type": "user",
+			"id": "principal.id", "action": "addUser", "fields": ` + fields + `}}`)
+	}
+	load := func(fields string) error {
+		m, err := manifestfs.Load("../../examples/tracker", "dev")
+		if err != nil {
+			t.Fatal(err)
+		}
+		m.App.Roles["lead"] = []string{"editor"}
+		m.App.Auth.People = map[string][]string{"lead": {"viewer", "editor"}}
+		m.UI = append(m.UI, manifestdomain.File{Path: "ui/pages/staff.json", Data: page(fields)})
+		_, err = Compile(m)
+		return err
+	}
+	if err := load(`[{"path": "/displayName"}, {"path": "/email"}, {"path": "/password"},
+		{"path": "/role", "options": [{"value": "viewer", "label": "Viewer"}, {"value": "editor", "label": "Editor"}]}]`); err != nil {
+		t.Fatal(err)
+	}
+	if err := load(`[{"path": "/roles"}]`); err == nil || !strings.Contains(err.Error(), "/fields/0/path") {
+		t.Fatalf("unknown input field: %v", err)
+	}
+	if err := load(`[{"path": "/role", "options": [{"value": "viewer"}]}]`); err == nil || !strings.Contains(err.Error(), "label") {
+		t.Fatalf("option without label: %v", err)
+	}
+}

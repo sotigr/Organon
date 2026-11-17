@@ -58,6 +58,7 @@ directory in version control; production servers are changed only through
 | `auth.password` | Password login; users are created by admins (no self-signup). |
 | `auth.oidc[]` | OpenID Connect providers. `google` and `gitlab` have default issuers; others need `issuer`. `signup: false` (default) means only identities linked through an admin invite can log in; `signup: true` creates users on first login, limited to verified emails in `allowedDomains` when set. |
 | `auth.mfa` | TOTP second factor for `requiredForRoles`, or `requiredForAll: true`. |
+| `auth.people` | Since 1.2. Non-admins who manage users: role → roles they may assign, e.g. `{"manager": ["mechanic", "manager"]}`; never `admin` ([policies](04-policies.md#people-management)). |
 | `limits` | May only lower the server defaults. |
 | `llm.aliases` | Model aliases used by flows (`default`, `fast`, `large`, or your own) mapped to `"<provider>:<model>"`. Without a prefix the provider is `anthropic`. Defaults: `default` and `large` → `anthropic:claude-opus-5-5`, `fast` → `anthropic:claude-haiku-5-5`. |
 | `python.allowedPackages` | When set, every package in `nodes/*.lock` must be listed. |

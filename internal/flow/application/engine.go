@@ -86,6 +86,10 @@ type Deps struct {
 	// Document renders a document template and stores the PDF as a blob
 	// (ADR 0022); nil disables document.render.
 	Document func(ctx context.Context, p accessapi.Principal, template string, vars map[string]any, typeName, field string) (kernel.Blob, error)
+	// People serves the built-in people actions of the user type (ADR
+	// 0030); IsPeople names them.
+	People   func(ctx context.Context, p accessapi.Principal, id kernel.ID, action string, input map[string]any) (any, error)
+	IsPeople func(action string) bool
 	// Share serves the built-in share action of x-shareable types (ADR
 	// 0020); nil disables it.
 	Share func(ctx context.Context, p accessapi.Principal, id kernel.ID, def *schemaapi.ShareDef, input map[string]any) (any, error)

@@ -62,7 +62,7 @@ func (h *uiEditor) check(edit func(files map[string][]byte)) []Problem {
 		srcs[i] = uidomain.Source{File: p, Data: files[p]}
 	}
 	c := h.rt.App
-	_, probs := uidomain.Compile(uiDeps(c.Types, c.Flows), srcs)
+	_, probs := uidomain.Compile(uiDeps(c.Types, c.Flows, peopleInputs(c.Manifest, c.People)), srcs)
 	out := []Problem{}
 	for _, p := range probs {
 		out = append(out, Problem{File: p.File, Pointer: p.Pointer, Message: p.Message, Warning: p.Warning})

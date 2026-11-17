@@ -67,6 +67,51 @@ func checkAuth(a manifestdomain.AuthConfig, roles map[string][]string) []Problem
 			probs = append(probs, Problem{File: "app.json", Pointer: fmt.Sprintf("/auth/mfa/requiredForRoles/%d", i), Message: "unknown role " + r})
 		}
 	}
+	return append(probs, checkPeople(a, roles)...)
+}
+
+// checkPeople validates auth.people (ADR 0030): app roles only, never
+// admin, and non-empty lists without duplicates. Managers without MFA
+// get a warning.
+func checkPeople(a manifestdomain.AuthConfig, roles map[string][]string) []Problem {
+	var probs []Problem
+	keys := make([]string, 0, len(a.People))
+	for k := range a.People {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	for _, k := range keys {
+		ptr := "/auth/people/" + k
+		add := func(p, msg string, warn bool) {
+			probs = append(probs, Problem{File: "app.json", Pointer: p, Message: msg, Warning: warn})
+		}
+		switch _, ok := roles[k]; {
+		case k == "admin":
+			add(ptr, "admins already manage people; list other roles", false)
+		case !ok:
+			add(ptr, "unknown role "+k, false)
+		case !a.MFA.RequiredForAll && !slices.Contains(a.MFA.RequiredForRoles, k):
+			add(ptr, "people managers can reset passwords and MFA; consider listing "+k+" in auth.mfa.requiredForRoles", true)
+		}
+		list := a.People[k]
+		if len(list) == 0 {
+			add(ptr, "list the roles "+k+" may assign", false)
+		}
+		seen := map[string]bool{}
+		for i, r := range list {
+			p := fmt.Sprintf("%s/%d", ptr, i)
+			_, ok := roles[r]
+			switch {
+			case r == "admin":
+				add(p, "only admins assign the admin role", false)
+			case !ok:
+				add(p, "unknown role "+r, false)
+			case seen[r]:
+				add(p, "duplicate role "+r, false)
+			}
+			seen[r] = true
+		}
+	}
 	return probs
 }
 

@@ -77,7 +77,7 @@ var (
 	gapEnum   = []string{"none", "sm", "md", "lg"}
 	toneEnum  = []string{"default", "muted", "accent", "success", "warning", "danger"}
 	dispEnum  = []string{"auto", "text", "date", "datetime", "number", "badge", "ref", "image"}
-	widgEnum  = []string{"auto", "text", "textarea", "number", "select", "checkbox", "datetime", "ref", "file", "decimal"}
+	widgEnum  = []string{"auto", "text", "textarea", "number", "select", "checkbox", "datetime", "ref", "file", "decimal", "password"}
 	pSource   = Prop{Name: "source", Kind: KindSource, Doc: "Data source of the page"}
 	pChildren = Prop{Name: "children", Kind: KindChildren}
 	// navLink is one link of a nav or user menu (ADR 0029).
@@ -166,7 +166,9 @@ var components = []Component{
 				{Name: "path", Kind: KindPath, Required: true}, {Name: "label", Kind: KindText},
 				{Name: "widget", Kind: KindEnum, Enum: widgEnum}, {Name: "help", Kind: KindText},
 				{Name: "labelField", Kind: KindString, Doc: "ref widget: field of the target shown in the picker"},
-				{Name: "speech", Kind: KindBool, Doc: "false: no dictation into this field (codes, plates); ui/app.json speech turns dictation on"}}},
+				{Name: "speech", Kind: KindBool, Doc: "false: no dictation into this field (codes, plates); ui/app.json speech turns dictation on"},
+				{Name: "options", Kind: KindObjects, Doc: "select widget: the choices in this order, with translatable labels (since 1.2)", Item: []Prop{
+					{Name: "value", Kind: KindString, Required: true}, {Name: "label", Kind: KindText, Required: true}}}}},
 			{Name: "submit", Kind: KindText, Doc: "Submit button label"}}},
 	{Name: "button", Family: "forms", Doc: "Runs its click steps.", Events: []string{"click"}, Props: []Prop{
 		{Name: "label", Kind: KindText, Required: true},
