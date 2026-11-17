@@ -70,8 +70,8 @@ type Compiled struct {
 	// People is app.json auth.people (ADR 0030); nil when unset.
 	People *accessdomain.People
 	Flows  *flowdomain.FlowSet
-	Nodes     *flowdomain.NodeRegistry
-	LLM       llmdomain.Config
+	Nodes  *flowdomain.NodeRegistry
+	LLM    llmdomain.Config
 	// Migrations are the compiled data migrations (spec 12.5).
 	Migrations []*contentdomain.Migration
 	// UI is the compiled ui/ directory (ADR 0016); UI.App is nil when the

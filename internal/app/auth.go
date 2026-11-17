@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	accessapp "organon/internal/access/application"
 	accesscrypto "organon/internal/access/infrastructure/crypto"
@@ -67,7 +68,48 @@ func checkAuth(a manifestdomain.AuthConfig, roles map[string][]string) []Problem
 			probs = append(probs, Problem{File: "app.json", Pointer: fmt.Sprintf("/auth/mfa/requiredForRoles/%d", i), Message: "unknown role " + r})
 		}
 	}
-	return append(probs, checkPeople(a, roles)...)
+	probs = append(probs, checkPeople(a, roles)...)
+	return append(probs, checkSession(a.Session)...)
+}
+
+// Bounds of auth.session.
+const (
+	maxSessionDays      = 3650
+	defaultSessionDays  = 30
+	defaultSessionHours = 24
+)
+
+// checkSession validates auth.session: positive values, at most ten years,
+// and an idle timeout no longer than the lifetime.
+func checkSession(s manifestdomain.SessionConfig) []Problem {
+	var probs []Problem
+	add := func(p, msg string) {
+		probs = append(probs, Problem{File: "app.json", Pointer: "/auth/session/" + p, Message: msg})
+	}
+	if s.IdleHours < 0 {
+		add("idleHours", "must be positive")
+	}
+	if s.MaxDays < 0 || s.MaxDays > maxSessionDays {
+		add("maxDays", fmt.Sprintf("must be between 1 and %d", maxSessionDays))
+	}
+	idle, max := sessionDurations(s)
+	if s.IdleHours > 0 && idle > max {
+		add("idleHours", fmt.Sprintf("is longer than the session lifetime (%d days)", int(max.Hours()/24)))
+	}
+	return probs
+}
+
+// sessionDurations returns the idle timeout and lifetime of auth.session,
+// with the defaults for unset values.
+func sessionDurations(s manifestdomain.SessionConfig) (idle, max time.Duration) {
+	idle, max = defaultSessionHours*time.Hour, defaultSessionDays*24*time.Hour
+	if s.IdleHours > 0 {
+		idle = time.Duration(s.IdleHours) * time.Hour
+	}
+	if s.MaxDays > 0 {
+		max = time.Duration(s.MaxDays) * 24 * time.Hour
+	}
+	return idle, max
 }
 
 // checkPeople validates auth.people (ADR 0030): app roles only, never
@@ -123,6 +165,7 @@ func authConfig(cfg config.Config, c *Compiled, instanceKey []byte, secrets func
 	ac := accessapp.AuthConfig{PasswordEnabled: a.Password.Enabled, MinPasswordLength: a.Password.MinLength,
 		MFAAll: a.MFA.RequiredForAll, MFARoles: slices.Clone(a.MFA.RequiredForRoles), Issuer: c.Manifest.App.App,
 		OIDC: map[string]accessapp.OIDCConfig{}}
+	ac.SessionIdle, ac.SessionAbsolute = sessionDurations(a.Session)
 	key, err := dataKey(cfg)
 	if err != nil {
 		return ac, err

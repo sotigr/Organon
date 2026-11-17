@@ -138,3 +138,4 @@
 | Topic | Decision |
 |---|---|
 | Delegated user management (ADR 0030) | `app.json` `auth.people` (role -> assignable roles, never admin); built-in user actions `addUser` (on the caller's own record), `setRole`, `suspend`, `reactivate`, `setPassword`, `resetMfa`, `signOutEverywhere`, decided by the rule and not by policies; managers get the owner audience on users they manage; generic writes of `roles`/`status` stay admin-only; managers may manage other managers when listed; `password` widget and select `options` in UI forms; released with layouts as 1.2.0 |
+| Session lifetime | `app.json` `auth.session` `{idleHours, maxDays}` (defaults 24 h and 30 days, max 3650 days, idle no longer than the lifetime); set per app, not per server |

@@ -81,6 +81,16 @@ type AuthConfig struct {
 	// People names the roles whose holders manage users and the roles
 	// each may assign (ADR 0030).
 	People map[string][]string `json:"people,omitempty"`
+	// Session sets how long sign-ins last (since 1.2).
+	Session SessionConfig `json:"session"`
+}
+
+// SessionConfig is auth.session: the idle timeout and the absolute
+// lifetime of browser sessions and CLI tokens. Zero keeps the defaults
+// (24 hours idle, 30 days in all).
+type SessionConfig struct {
+	IdleHours int `json:"idleHours,omitempty"`
+	MaxDays   int `json:"maxDays,omitempty"`
 }
 
 // OIDCProvider is one entry of auth.oidc (spec 8.3, 12.2).

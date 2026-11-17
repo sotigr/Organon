@@ -172,6 +172,7 @@ myapp/
 | `auth.password` | Password sign-in. Admins create users; there is no self-signup (give customers share links, §6). |
 | `auth.oidc[]` | OIDC providers. `google` and `gitlab` have built-in issuers; others need `issuer`. With `signup: true`, users are created on first login (optionally only for `allowedDomains`). |
 | `auth.mfa` | TOTP for `requiredForRoles`, or `requiredForAll: true`. |
+| `auth.session` (since 1.2) | How long a sign-in lasts: `{"idleHours": 24, "maxDays": 30}` (the defaults). `idleHours` signs out after that long without requests; `maxDays` is the lifetime however active (at most 3650). |
 | `auth.people` (since 1.2) | Lets non-admins manage users: role → the roles its holders may assign, e.g. `{"manager": ["mechanic", "frontdesk", "manager"]}`. Never `admin`. See People management (§6). |
 | `limits` | May only lower the server's defaults. |
 | `llm.aliases` | Alias → `"<provider>:<model>"`. Built-in aliases are `default`, `large`, and `fast`. Flows use aliases only. |
